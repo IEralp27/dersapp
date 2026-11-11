@@ -147,6 +147,54 @@ export function contextLine(name: string, page: number): string {
   return `(Belge: "${name.replace(/\.pdf$/i, "")}", sayfa ${page})`;
 }
 
+// ------------------------------------------------------------ Sayfada işaretleme
+//
+// Ayarlarda "Sayfada işaretle" açıkken (varsayılan) MARKS_PROMPT sistem talimatının sonuna eklenir,
+// MARKS_ACTION_HINT ise Anlat / Adım adım çöz / sayfa düğmelerinin isteğine eklenir.
+// Biçim src/ai/marks.ts'te ayrıştırılır; çitin dili ("dersapp-marks") ve alan adları orada da geçer.
+
+/** Sistem talimatına eklenir: modelin sayfada yer göstermesi. */
+export const MARKS_PROMPT = `## 7. Sayfada yer gösterme (işaretler)
+Öğrencinin ekranında, sana gönderdiğin görüntünün üstüne işaret çizebilirsin: kutu, vurgulama, alt çizgi, ok ve numaralı etiket. Böylece "şurada şunu yapıyoruz" diye gösterebilirsin. İşaretler senin anlatımına eşlik eder; yerine geçmez.
+
+**Ne zaman işaretle:** Anlatımın görüntüde belirli bir yere atıf yapıyorsa: bir formülün bir terimi, bir şeklin bir parçası, bir tablonun bir satırı, sorunun verilenleri. Her cümleyi işaretleme. En çok 6 işaret kullan; çoğu yanıtta 2-4 yeter. Görüntüde gösterilecek belirli bir yer yoksa (genel bir soru, takip sorusu, sohbet) hiç işaret koyma.
+
+**Emin değilsen işaretleme:** Bir yerin görüntünün neresinde olduğundan emin değilsen o işareti koyma; yanlış yeri gösteren işaret, hiç işaret olmamasından kötüdür. Kutuyu, gösterdiğin şeyi tam saracak kadar büyük çiz; biraz pay bırak.
+
+**Koordinatlar:** Konuşmadaki EN SON görüntüye göre, 0-1000 arası tam sayılar: (0, 0) görüntünün sol üst köşesi, (1000, 1000) sağ alt köşesi. x sağa, y aşağı doğru artar; x ve y ayrı ayrı ölçeklenir (görüntü kare olmasa da sağ kenar x=1000, alt kenar y=1000). Görüntünün kenarlarında bu ölçeği gösteren bir cetvel ve çok soluk bir ızgara olabilir; bunları DersApp ekledi, belgenin parçası değiller: konumu bulmak için kullan ama anlatımda onlardan söz etme.
+
+**Biçim:** Yanıtının EN SONUNA, dili dersapp-marks olan tek bir kod çiti içinde tek bir JSON nesnesi yaz. Öğrenci bu bloğu görmez; yalnızca işaretleri görür. Bloğun dışında koordinat yazma.
+\`\`\`dersapp-marks
+{"marks": [
+  {"n": 1, "type": "box", "box": [x0, y0, x1, y1], "note": "kısa not"},
+  {"n": 2, "type": "underline", "box": [x0, y0, x1, y1]},
+  {"n": 3, "type": "highlight", "box": [x0, y0, x1, y1]},
+  {"n": 4, "type": "arrow", "from": [x, y], "to": [x, y], "note": "kısa not"},
+  {"n": 5, "type": "label", "at": [x, y]}
+]}
+\`\`\`
+- "box": dikdörtgen çerçeve. "highlight": fosforlu kalem gibi boyar (bir satırı, bir terimi). "underline": kutunun alt kenarı boyunca çizgi (kutuyu, çizilecek metni saracak şekilde ver). "arrow": "from"dan "to"ya ok; ucu ("to") gösterilen yerde olsun. "label": yalnızca bir noktaya numara koyar.
+- "n": anlatımdaki adımın numarası. Anlatım metninde aynı yeri anlattığın yerde ① ② ③ ④ ⑤ ⑥ karakterlerini kullan (ör. "① Paydaki $s+2$ ..."). Numara verdiğin her işaret metinde aynı numaralı ① karakteriyle geçmeli; metinde ② yazıyorsan 2 numaralı bir işaret olmalı. Numaralar 1'den başlayıp sırayla artsın.
+- "note": isteğe bağlı, en çok 4-5 kelimelik etiket ("pay", "kutup", "verilen: R=10 Ω"). Uzun açıklama nota değil anlatıma.
+- Yalnızca gerçek JSON: yorum yok, sondaki virgül yok, sayılar tırnaksız.
+
+### İşaret örneği
+Görüntüde üst kısımda $G(s) = \\dfrac{5}{s+2}$ formülü var (yaklaşık x 120-560, y 80-190 arası), altında bir basamak yanıtı grafiği var.
+
+KÖTÜ: Her cümleye işaret koymak; görüntüde olmayan bir yeri ya da yalnızca tahmin ettiğin bir yeri işaretlemek; koordinatları metnin içinde "(x=300, y=150)" diye yazmak; metinde ① geçtiği halde 1 numaralı işaret koymamak; bütün sayfayı saran dev bir kutu çizmek.
+
+İYİ:
+"① Paydaki $s+2$ sistemin ne kadar hızlı oturduğunu belirler. ② Grafikteki eğrinin yatay çizgiye yaklaştığı değer, DC kazancıdır: $2{,}5$."
+\`\`\`dersapp-marks
+{"marks": [
+  {"n": 1, "type": "box", "box": [330, 120, 560, 190], "note": "payda"},
+  {"n": 2, "type": "arrow", "from": [760, 420], "to": [620, 330], "note": "son değer 2,5"}
+]}
+\`\`\``;
+
+/** Eylem isteklerine eklenir (işaretleme açıkken). */
+export const MARKS_ACTION_HINT = "Anlatırken görüntüde belirli bir yere atıf yapıyorsan o yeri işaretle (sistem talimatındaki işaret biçimiyle; metinde ① ② ③ ile).";
+
 // ------------------------------------------------------------ Test ve özet PDF'i
 //
 // Aşağıdaki sabitler "Test hazırla" ve "Özet PDF'i oluştur" içindir (src/ai/quiz*.ts).

@@ -11,6 +11,10 @@ import { initStudy, studyRow } from "./quiz-view";
 import { ACTION_PROMPTS, FREE_QUESTION_HINT, SYSTEM_PROMPT, contextLine } from "./prompts";
 import type { ActionId } from "./prompts";
 import {
+  actionHint, attachMarks, clearMarks, initMarks, marksSettingField, pageRegion, rulerImage, setRegion, systemWithMarks, visibleText,
+} from "./marks-ui";
+import type { Region } from "./marks-ui";
+import {
   AiError, PRESETS, currentConfig, defaultConfig, listModels, loadSettings, missing, presetOf,
   saveSettings, streamChat,
 } from "./providers";
@@ -29,6 +33,8 @@ interface Attachment {
   canvas: HTMLCanvasElement;
   page: number;
   kind: "snip" | "page";
+  /** Görüntünün sayfadaki yeri (yapay zeka işaretleri için) */
+  region?: Region | null;
 }
 
 interface Turn {
@@ -185,6 +191,7 @@ function newConversation(): void {
   c.busy?.abort();
   c.turns = [];
   c.thread.replaceChildren();
+  clearMarks(c.path);
   render();
   input.focus();
 }
@@ -258,6 +265,7 @@ async function ask(c: Conv, q: AskInput): Promise<void> {
   const messages = history(c);
   c.turns.push(bot);
   c.thread.append(user.el, bot.el);
+  if (q.att) setRegion(c.path, q.att.region ?? null); // işaretler bu görüntüye göre
   if (c.pending === q.att) c.pending = null;
   const ctrl = new AbortController();
   c.busy = ctrl;
@@ -268,13 +276,13 @@ async function ask(c: Conv, q: AskInput): Promise<void> {
   const paint = (final: boolean) => {
     frame = 0;
     const stick = shown === c && nearBottom();
-    body.innerHTML = renderMarkdown(bot.text, !final);
+    body.innerHTML = renderMarkdown(visibleText(bot.text, !final), !final);
     if (stick) scrollDown();
   };
 
   try {
     await streamChat({
-      presetId, config, system: SYSTEM_PROMPT, messages, signal: ctrl.signal,
+      presetId, config, system: systemWithMarks(SYSTEM_PROMPT), messages, signal: ctrl.signal,
       onText: (d) => {
         bot.text += d;
         if (!frame) frame = requestAnimationFrame(() => paint(false));
@@ -286,6 +294,7 @@ async function ask(c: Conv, q: AskInput): Promise<void> {
       showError(c, user, bot, q, new AiError("Model boş yanıt döndürdü. Başka bir model deneyebilirsin."));
     } else {
       paint(true);
+      attachMarks(c.path, wrap, body, bot.text);
     }
   } catch (e) {
     cancelAnimationFrame(frame);
@@ -311,7 +320,7 @@ async function ask(c: Conv, q: AskInput): Promise<void> {
 
 function addAnswerTools(bot: Turn): void {
   const bar = el("div", "ai-answer-tools");
-  bar.append(iconBtn("Yanıtı kopyala (Markdown)", ICONS.copy, () => void copyText(bot.text, "Yanıt panoya kopyalandı.")));
+  bar.append(iconBtn("Yanıtı kopyala (Markdown)", ICONS.copy, () => void copyText(visibleText(bot.text, false), "Yanıt panoya kopyalandı.")));
   bot.el.append(bar);
 }
 
@@ -350,7 +359,7 @@ function runAction(id: ActionId, att: Attachment): void {
   if (!c) return;
   const cur = host.current()!;
   void ask(c, {
-    text: `${ACTION_PROMPTS[id]}\n\n${contextLine(cur.name, att.page)}`,
+    text: `${ACTION_PROMPTS[id]}${id === "quiz" ? "" : actionHint()}\n\n${contextLine(cur.name, att.page)}`,
     label: `${ACTION_LABELS[id]} · s. ${att.page}`,
     att,
   });
@@ -373,7 +382,8 @@ async function pageAction(id: "explainPage" | "summarizePage"): Promise<void> {
     return;
   }
   const { image, url } = toImage(canvas);
-  runAction(id, { image, url, canvas, page, kind: "page" });
+  const region = await pageRegion(cur.view, page);
+  runAction(id, { image: rulerImage(canvas, toImage) ?? image, url, canvas, page, kind: "page", region });
 }
 
 function sendTyped(): void {
@@ -392,15 +402,28 @@ function sendTyped(): void {
 }
 
 function onSnip(e: Event): void {
-  const d = (e as CustomEvent<{ image: HTMLCanvasElement; page: number; path: string; name: string }>).detail;
+  const d = (e as CustomEvent<{
+    image: HTMLCanvasElement; page: number; path: string; name: string; rect?: Region["rect"]; board?: boolean;
+  }>).detail;
   if (!d?.image) return;
   e.preventDefault(); // panoya kopyalama yerine panel üstlenir
   const c = convFor(d.path, d.name);
   const { image, url } = toImage(d.image);
-  c.pending = { image, url, canvas: d.image, page: d.page, kind: "snip" };
+  const region = d.rect ? { page: d.page, rect: d.rect, board: !!d.board } : null;
+  c.pending = { image: rulerImage(d.image, toImage) ?? image, url, canvas: d.image, page: d.page, kind: "snip", region };
   settingsOpen = false;
   toggleAi(true);
   render();
+}
+
+/** Konuşmaya modele gönderilmeyen bir bilgi kartı ekler (ör. bağlı yapay zekanın işaretleri). */
+function appendNotice(path: string, name: string, card: HTMLElement): void {
+  const c = convFor(path, name);
+  c.thread.append(card);
+  if (shown === c) {
+    mainEl.querySelector(".ai-empty")?.remove();
+    scrollDown();
+  }
 }
 
 /** Testin sonuç ekranından gelen takip mesajı ("Bu yanlışımı anlat"). */
@@ -638,6 +661,7 @@ function settingsView(): HTMLElement {
     "Görüntü (vision) anlayan bir model seçmelisin; yoksa model PDF'ten seçtiğin bölgeyi göremez. Listede \"görsel\" yazanlar görüntü kabul eder.");
   const status = el("div", "ai-status");
   const note = el("p", "ai-hint");
+  const marksField = marksSettingField();
 
   const protoField = field("Protokol", protoSel);
   const keyField = field("API anahtarı", keyRow, keyHint);
@@ -653,6 +677,7 @@ function settingsView(): HTMLElement {
     field("Model", modelRow),
     modelSel,
     modelHint,
+    marksField.el,
     status,
     note,
   );
@@ -750,6 +775,7 @@ function settingsView(): HTMLElement {
       return;
     }
     settings = draft;
+    marksField.commit();
     if (!saveSettings(settings)) host.toast("Ayarlar kalıcı olarak kaydedilemedi; yalnızca bu oturumda geçerli.");
     settingsOpen = false;
     render();
@@ -884,6 +910,7 @@ export function initAi(h: AiHost): void {
   document.getElementById("topbar")!.append(toggleBtn);
 
   document.addEventListener("dersapp:snip", onSnip);
+  initMarks({ openPanel: () => toggleAi(true), appendNotice, toast: (t, k) => host.toast(t, k) });
   initStudy({
     current: () => host.current(), toast: (t, k) => host.toast(t, k), panel, settings: () => settings,
     pending: () => activeConv()?.pending ?? null, openSettings, followUp,

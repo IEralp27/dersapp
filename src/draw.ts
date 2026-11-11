@@ -1,17 +1,47 @@
 // Çizim modeli: şekiller sayfa biriminde (yakınlaştırmadan bağımsız) tutulur,
 // böylece yakınlaştırınca çizimler bozulmadan yeniden çizilir.
 
-export type DrawTool = "pen" | "hl" | "line" | "arrow" | "rect" | "oval";
+export type DrawTool = "pen" | "hl" | "line" | "arrow" | "rect" | "oval" | "text";
 export type Tool = "none" | DrawTool | "eraser" | "snip" | "select";
 
 export interface Shape {
   t: DrawTool;
   /** renk */
   c: string;
-  /** kalınlık (sayfa birimi) */
+  /** kalınlık (sayfa birimi); metinde yazı boyutu */
   w: number;
-  /** pen/hl: x0,y0,x1,y1,...  diğerleri: x0,y0,x1,y1 */
+  /** pen/hl: x0,y0,x1,y1,...  diğerleri: x0,y0,x1,y1  (metin: yazının kutusu, sol üst + sağ alt) */
   p: number[];
+  /** Yalnızca metin: yazı (satırlar "\n" ile ayrılır) */
+  s?: string;
+}
+
+/** Metin açıklamalarının yazı tipi (tuval ve düzenleme kutusu aynı tipi kullanır) */
+export const TEXT_FONT = '"Segoe UI", system-ui, sans-serif';
+/** Satır yüksekliği (yazı boyutunun katı) */
+export const TEXT_LINE = 1.25;
+
+/** Kalınlık denetiminden (0,5-12) metin boyutuna (sayfa birimi) */
+export function textSize(stroke: number): number {
+  return Math.round(10 + stroke * 2);
+}
+
+let measureCtx: CanvasRenderingContext2D | null = null;
+
+/** Metnin kutusunun genişlik/yüksekliği (sayfa birimi). Yalnızca tarayıcıda çalışır. */
+export function measureText(text: string, size: number): [number, number] {
+  measureCtx ??= document.createElement("canvas").getContext("2d")!;
+  measureCtx.font = `${size}px ${TEXT_FONT}`;
+  const lines = text.split("\n");
+  let w = 0;
+  for (const l of lines) w = Math.max(w, measureCtx.measureText(l).width);
+  return [Math.max(w, size * 0.3), lines.length * size * TEXT_LINE];
+}
+
+/** (x, y) sol üst köşeli metin şekli */
+export function makeText(text: string, x: number, y: number, color: string, size: number): Shape {
+  const [w, h] = measureText(text, size);
+  return { t: "text", c: color, w: size, p: [x, y, x + w, y + h], s: text };
 }
 
 interface Action {
@@ -95,7 +125,9 @@ export class Notes {
   toJSON(): string {
     const pages: Record<string, Shape[]> = {};
     for (const [n, list] of this.pages) {
-      pages[n] = list.map((s) => ({ t: s.t, c: s.c, w: r2(s.w), p: s.p.map(r2) }));
+      pages[n] = list.map((s) => (s.t === "text"
+        ? { t: s.t, c: s.c, w: r2(s.w), p: s.p.map(r2), s: s.s }
+        : { t: s.t, c: s.c, w: r2(s.w), p: s.p.map(r2) }));
     }
     return JSON.stringify(this.pageCount ? { v: 1, n: this.pageCount, pages } : { v: 1, pages });
   }
@@ -108,7 +140,8 @@ export class Notes {
       if (Number.isInteger(raw.n) && raw.n > 0) notes.pageCount = Math.min(raw.n, 10_000);
       for (const [n, list] of Object.entries(raw.pages ?? {})) {
         const ok = (list as Shape[]).filter(
-          (s) => s && typeof s.t === "string" && Array.isArray(s.p) && s.p.length >= 4,
+          (s) => s && typeof s.t === "string" && Array.isArray(s.p) && s.p.length >= 4
+            && (s.t !== "text" || (typeof s.s === "string" && s.s.length > 0)),
         );
         if (ok.length) notes.pages.set(Number(n), ok);
       }
@@ -175,6 +208,15 @@ export function drawShape(ctx: CanvasRenderingContext2D, s: Shape): void {
       ctx.lineJoin = "miter";
       ctx.strokeRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
       break;
+    case "text": {
+      ctx.font = `${s.w}px ${TEXT_FONT}`;
+      ctx.textBaseline = "top";
+      const lh = s.w * TEXT_LINE;
+      // satır kutusunun içinde dikey ortala (satır aralığının yarısı üstte)
+      const pad = (lh - s.w) / 2;
+      (s.s ?? "").split("\n").forEach((line, i) => ctx.fillText(line, x0, y0 + pad + i * lh));
+      break;
+    }
     case "oval":
       ctx.beginPath();
       ctx.ellipse((x0 + x1) / 2, (y0 + y1) / 2, Math.abs(x1 - x0) / 2, Math.abs(y1 - y0) / 2, 0, 0, Math.PI * 2);
@@ -187,7 +229,7 @@ export function drawShape(ctx: CanvasRenderingContext2D, s: Shape): void {
 /** Şeklin çizgisini nokta dizisi olarak verir (silgi isabet testi için). */
 export function outline(s: Shape): number[] {
   const [x0, y0, x1, y1] = s.p;
-  if (s.t === "rect") return [x0, y0, x1, y0, x1, y1, x0, y1, x0, y0];
+  if (s.t === "rect" || s.t === "text") return [x0, y0, x1, y0, x1, y1, x0, y1, x0, y0];
   if (s.t === "oval") {
     const out: number[] = [];
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, rx = Math.abs(x1 - x0) / 2, ry = Math.abs(y1 - y0) / 2;
@@ -209,6 +251,11 @@ function distToSegment(px: number, py: number, ax: number, ay: number, bx: numbe
 
 /** (x, y) noktası r yarıçapıyla şekle değiyor mu? */
 export function hitShape(s: Shape, x: number, y: number, r: number): boolean {
+  if (s.t === "text") {
+    // metinde kutunun içi de isabet sayılır
+    const [x0, y0, x1, y1] = s.p;
+    return x >= x0 - r && x <= x1 + r && y >= y0 - r && y <= y1 + r;
+  }
   const pts = outline(s);
   const reach = r + (s.t === "hl" ? s.w * 2 : s.w / 2);
   for (let i = 0; i < pts.length - 2; i += 2) {
@@ -251,6 +298,12 @@ export function moveShape(s: Shape, dx: number, dy: number): Shape {
   return out;
 }
 
+/** Şeklin yeni sürümü (aynı kimlikle) — metin düzenleme için. */
+export function replaceShape(old: Shape, next: Shape): Shape {
+  ids.set(next, shapeId(old));
+  return next;
+}
+
 /** Kaydırılmış kopya (yeni kimlikle) — çoğaltma için. */
 export function copyShape(s: Shape, dx: number, dy: number): Shape {
   return { ...s, p: s.p.map((v, i) => v + (i % 2 ? dy : dx)) };
@@ -268,7 +321,7 @@ export function shapeBounds(s: Shape): Box {
     y0 = Math.min(y0, pts[i + 1]);
     y1 = Math.max(y1, pts[i + 1]);
   }
-  const pad = s.t === "hl" ? s.w * 2 : s.t === "arrow" ? s.w * 3 + 6 : s.w / 2;
+  const pad = s.t === "text" ? 0 : s.t === "hl" ? s.w * 2 : s.t === "arrow" ? s.w * 3 + 6 : s.w / 2;
   return [x0 - pad, y0 - pad, x1 + pad, y1 + pad];
 }
 

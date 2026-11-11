@@ -1,0 +1,97 @@
+/* Yapay zeka işaret katmanı (sayfanın üstünde, tıklamayı engellemez) */
+:root { --ai-mark: #e0338a; }
+.ai-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+.ai-layer svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.ai-g { transition: opacity 0.2s; }
+.ai-g.faded { opacity: 0.32; }
+.ai-g.has-hot .ai-m:not(.hot) { opacity: 0.45; }
+.ai-m * { vector-effect: non-scaling-stroke; }
+.ai-box rect { fill: #e0338a0f; stroke: var(--ai-mark); stroke-width: 2px; stroke-dasharray: 7 4; }
+.ai-highlight rect { fill: #e0338a30; stroke: none; }
+.ai-underline line { stroke: var(--ai-mark); stroke-width: 3px; stroke-linecap: round; }
+.ai-arrow line { stroke: var(--ai-mark); stroke-width: 2.5px; stroke-linecap: round; }
+.ai-arrow polygon { fill: var(--ai-mark); }
+.ai-m.hot rect, .ai-m.hot line { stroke-width: 3.5px; filter: drop-shadow(0 0 3px #e0338acc); }
+.ai-highlight.hot rect { fill: #e0338a55; }
+.ai-box.hot rect { fill: #e0338a1c; stroke-dasharray: none; }
+
+.ai-tag {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transform: translate(-11px, -50%);
+  white-space: nowrap;
+  font: 600 12px/1 "Segoe UI", system-ui, sans-serif;
+}
+.ai-tag.no-num { transform: translate(0, -100%); }
+.ai-tag.faded { opacity: 0.45; }
+.ai-badge {
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  border-radius: 11px;
+  background: var(--ai-mark);
+  color: #fff;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px #0006;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+body:not([data-tool="none"]):not([data-tool="select"]) .ai-badge { pointer-events: none; }
+.ai-tag.hot .ai-badge { transform: scale(1.25); box-shadow: 0 0 0 4px #e0338a55, 0 1px 4px #0006; }
+.ai-tag-note {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: #fffffff0;
+  color: #8a1452;
+  border: 1px solid var(--ai-mark);
+  font-weight: 500;
+  box-shadow: 0 1px 3px #0003;
+}
+.ai-tag.hot .ai-tag-note { background: #fff; color: #5e0b37; }
+
+/* Yerinde metin yazma kutusu */
+.text-edit {
+  position: absolute;
+  z-index: 3;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 1px dashed var(--accent);
+  outline-offset: 2px;
+  background: #ffffffb0;
+  resize: none;
+  overflow: hidden;
+  white-space: pre;
+}
+body[data-tool="text"] .pages .page { cursor: text; }
+
+/* Metin yerleştirme önizlemesi (dersapp:place-text) */
+.place-ghost {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  white-space: pre;
+  opacity: 0.6;
+  outline: 1px dashed var(--accent);
+  outline-offset: 2px;
+}
+body.placing-text .pages .page { cursor: copy; }
