@@ -91,3 +91,124 @@
 .calc-key.eq { background: var(--accent); color: #fff; font-size: 16px; }
 .calc-key.eq:hover:not(:disabled) { background: var(--accent); filter: brightness(1.15); }
 .calc-key.wide { grid-column: span 2; }
+
+/* ---------------------------------------------------------- Gelişmiş sürüm */
+.calc { max-height: calc(100% - 8px); }
+.calc.advanced { width: 300px; }
+.calc.placing { opacity: 0.3; pointer-events: none; transition: opacity 0.15s; }
+.calc-adv-btn.on { background: var(--hover); color: var(--accent); }
+.calc-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.calc-result { margin: 4px 12px 8px; }
+.calc-result .calc-out { margin: 0; }
+.calc-out.long { font-size: 17px; }
+.calc-out.final.long { font-size: 16px; }
+.calc-root { font-size: 16px; line-height: 1.35; }
+.calc-root-n { color: var(--dim); font-weight: 400; }
+.calc-out.error .calc-err-where {
+  margin-top: 3px;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color: var(--dim);
+  white-space: pre-wrap;
+  text-align: left;
+}
+.calc-err-where mark { background: rgba(229, 72, 77, 0.3); color: var(--fg); border-radius: 2px; }
+.calc-bases {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 11px;
+  color: var(--dim);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.calc-actions { display: flex; align-items: center; gap: 2px; margin-top: 4px; }
+.calc-spacer { flex: 1; }
+.calc-ibtn {
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+}
+.calc-ibtn:hover { color: var(--fg); background: var(--hover); }
+.calc-ibtn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.calc-chip {
+  padding: 2px 8px;
+  font-size: 11px;
+  border-radius: 10px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--dim);
+  cursor: pointer;
+}
+.calc-chip.on { color: var(--accent); border-color: var(--accent); }
+
+.calc-history li { display: flex; align-items: center; }
+.calc-history li .calc-hist-item { flex: 1; min-width: 0; }
+.calc-hist-place { flex: none; width: 24px; height: 22px; }
+.calc-hist-place svg { width: 14px; height: 14px; }
+.calc-history { flex: none; }
+
+.calc-adv { margin: 0 10px 8px; padding: 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+.calc-opts { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.calc-tabs { display: flex; gap: 2px; margin-bottom: 6px; border-bottom: 1px solid var(--line); }
+.calc-tab {
+  flex: 1;
+  padding: 4px 2px;
+  font-size: 11px;
+  background: transparent;
+  color: var(--dim);
+  border-radius: 4px 4px 0 0;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+.calc-tab.on { color: var(--fg); border-bottom-color: var(--accent); }
+.calc-adv-pad { padding: 0; }
+.calc-adv-pad .calc-key { height: 28px; font-size: 12px; background: var(--panel); }
+.calc-adv-pad .calc-key.op { font-size: 14px; }
+
+.calc-vars .none { color: var(--dim); padding: 6px 2px; font-size: 12px; }
+.calc-var-list { list-style: none; margin: 0; padding: 0; max-height: 120px; overflow-y: auto; }
+.calc-var-list li { display: flex; align-items: center; }
+.calc-var-item {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 6px;
+  padding: 3px 6px;
+  text-align: left;
+  background: transparent;
+  border-radius: 4px;
+}
+.calc-var-item .v-name { font-weight: 600; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.calc-var-item .v-val { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.calc-var-clear { margin-top: 4px; width: 100%; font-size: 11px; padding: 3px; color: var(--danger); background: transparent; }
+.calc-head { flex: none; }
+/* button.on (styles.css) dolu mavi yapar; panel içindeki açık/kapalı düğmeleri daha sade */
+.calc .calc-chip.on, .calc .calc-chip.on:hover:not(:disabled) { background: rgba(61, 126, 255, 0.18); color: var(--accent); }
+.calc .calc-adv-btn.on, .calc .calc-adv-btn.on:hover:not(:disabled) { background: rgba(61, 126, 255, 0.18); color: var(--accent); }
+.calc .calc-tab.on, .calc .calc-tab.on:hover:not(:disabled) { background: transparent; color: var(--fg); }
+.calc-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.calc-head button { padding: 2px 6px; flex: none; }
+.calc-out.error { text-align: left; }
+.calc-hist-item .h-res { overflow: hidden; text-overflow: ellipsis; max-width: 62%; }
