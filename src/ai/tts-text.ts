@@ -1417,6 +1417,8 @@ const UNIT_TOKEN = /([A-Za-zΩμµ°%][A-Za-zΩμµ°/·²³^\-0-9]{0,11})/y;
 
 /** Düz (formül dışı) metni konuşmaya hazırlar: sayılar, yüzde, birim, para, simgeler. */
 export function plainSpeech(text: string, lang: Lang): string {
+  // Daire içindeki adım numaraları (① ②; yapay zeka işaretlerine atıf): sayı olarak oku
+  text = text.replace(/[\u2460-\u2473]/g, (ch) => " " + intWords(String(ch.charCodeAt(0) - 0x245f), lang) + ", ");
   let s = text.normalize("NFC");
   for (const [re, w] of lang === "tr" ? ABBR_TR : ABBR_EN) s = s.replace(re, w);
   // Emoji ve süs simgeleri
