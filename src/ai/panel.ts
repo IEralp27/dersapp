@@ -7,6 +7,7 @@ import type { PdfView } from "../viewer";
 import "./ai.css";
 import { initFloat } from "./float";
 import { renderMarkdown } from "./markdown";
+import { initStudy, studyRow } from "./quiz-view";
 import { ACTION_PROMPTS, FREE_QUESTION_HINT, SYSTEM_PROMPT, contextLine } from "./prompts";
 import type { ActionId } from "./prompts";
 import {
@@ -402,6 +403,16 @@ function onSnip(e: Event): void {
   render();
 }
 
+/** Testin sonuç ekranından gelen takip mesajı ("Bu yanlışımı anlat"). */
+function followUp(text: string, label: string, canvas?: HTMLCanvasElement, page = 0): void {
+  const c = activeConv();
+  if (!c) return;
+  if (c.busy) return host.toast("Yapay zeka şu an başka bir yanıt yazıyor; bitince yeniden dene.", "info");
+  settingsOpen = false;
+  toggleAi(true);
+  void ask(c, { text, label, att: canvas ? { ...toImage(canvas), canvas, page, kind: "page" } : null });
+}
+
 // ------------------------------------------------------------ Çizim (render)
 
 function render(): void {
@@ -492,6 +503,8 @@ function renderCompose(c: Conv | null): void {
     }
     composeEl.append(row);
   }
+
+  composeEl.append(studyRow(busy || noDoc)); // Test hazırla / Özet PDF'i / Testlerim (quiz-view.ts)
 
   const bar = el("div", "ai-input");
   input.disabled = noDoc;
@@ -871,6 +884,10 @@ export function initAi(h: AiHost): void {
   document.getElementById("topbar")!.append(toggleBtn);
 
   document.addEventListener("dersapp:snip", onSnip);
+  initStudy({
+    current: () => host.current(), toast: (t, k) => host.toast(t, k), panel, settings: () => settings,
+    pending: () => activeConv()?.pending ?? null, openSettings, followUp,
+  });
   // Sekme değişince (etkin sekme sınıfı değişir) panel o sekmenin konuşmasını göstersin
   new MutationObserver(() => render()).observe(document.getElementById("tabs")!, {
     subtree: true, childList: true, attributes: true, attributeFilter: ["class"],
