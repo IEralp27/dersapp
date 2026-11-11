@@ -34,7 +34,7 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls = "", text = ""): 
 }
 
 /** Markdown'u yazdırma için HTML'e çevirir (gizli MathML kopyası çıkarılır; html2canvas onu da çizerdi). */
-function md(src: string, cls = "qz-p-md"): HTMLElement {
+export function md(src: string, cls = "qz-p-md"): HTMLElement {
   const d = h("div", cls);
   d.innerHTML = renderMarkdown(src);
   d.querySelectorAll(".katex-mathml").forEach((m) => m.remove());
@@ -153,7 +153,7 @@ export async function blocksToPdf(blocks: Block[], title: string, footer: string
   }
 }
 
-const keep = (el: HTMLElement): Block => {
+export const keep = (el: HTMLElement): Block => {
   el.dataset.keep = "1";
   return { el, keepWithNext: true };
 };
@@ -206,7 +206,7 @@ function questionBlock(q: Question, n: number): HTMLElement {
  * Blok formül bir paragrafın içindeyse HTML ayrıştırıcı paragrafı böler ve kalan metin köke düşer;
  * sayfalara bölerken yalnızca öğeler taşındığı için bu metin kaybolurdu.
  */
-function wrapLoose(root: HTMLElement): void {
+export function wrapLoose(root: HTMLElement): void {
   let p: HTMLElement | null = null;
   for (const n of [...root.childNodes]) {
     const inline = n.nodeType === Node.TEXT_NODE || (n instanceof HTMLElement && getInline(n));

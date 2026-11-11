@@ -21,6 +21,7 @@ import type { Question, Response, Score } from "./quiz";
 import { QuizStore, newId } from "./quiz-store";
 import type { Attempt, SavedQuiz } from "./quiz-store";
 import "./quiz.css";
+import { notesPlan } from "./notes";
 
 export interface StudyHost {
   current(): { path: string; name: string; view: PdfView } | null;
@@ -33,12 +34,14 @@ export interface StudyHost {
   /** Yapay zeka paneline takip mesajı gönderir ("Bu yanlışımı anlat") */
   followUp(text: string, label: string, canvas?: HTMLCanvasElement, page?: number): void;
   openSettings(): void;
+  /** Bir üretim (test/özet) başlamadan önce (ör. ders modu duraklasın) */
+  beforeJob?(what: string): void;
 }
 
 type Mode = "quiz" | "summary" | "history";
 
 interface Form {
-  source: "page" | "range" | "region";
+  source: "page" | "range" | "region" | "all";
   from: number;
   to: number;
   count: 5 | 10 | 15;
@@ -47,6 +50,7 @@ interface Form {
 }
 
 const FORM_KEY = "dersapp.quiz.form";
+const range1 = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
 const MAX_PAGES = 10;
 
 const ICON = {
@@ -107,7 +111,7 @@ function md(src: string, cls = "qz-md"): HTMLElement {
 const pdfExport = () => import("./pdf-export");
 
 /** Dosya adına uygun metin */
-function fileSafe(s: string): string {
+export function fileSafe(s: string): string {
   return s.replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || "DersApp";
 }
 
@@ -161,7 +165,7 @@ function pagesLabel(pages: number[], region?: boolean): string {
 }
 
 /** Sayfa tuvalini modele gidecek JPEG'e çevirir (çok sayfada istek boyutu makul kalsın). */
-function toJpeg(canvas: HTMLCanvasElement, maxSide = 1600): ChatImage {
+export function toJpeg(canvas: HTMLCanvasElement, maxSide = 1600): ChatImage {
   let src = canvas;
   const long = Math.max(canvas.width, canvas.height);
   if (long > maxSide) {
@@ -197,7 +201,7 @@ export function initStudy(h: StudyHost): void {
   host = h;
 }
 
-function closeDialog(): void {
+export function closeDialog(): void {
   job?.abort();
   job = null;
   dialog?.remove();
@@ -209,6 +213,7 @@ function openDialog(mode: Mode): void {
   if (!cur) return;
   if (job) return; // hazırlanırken açık kalır
   closeDialog();
+  host.beforeJob?.(mode === "quiz" ? "Test hazırla" : mode === "summary" ? "Özet PDF'i" : "Testlerim");
   dialog = el("div", "qz-dialog");
   dialog.setAttribute("role", "dialog");
   dialog.addEventListener("keydown", (e) => {
@@ -222,7 +227,7 @@ function openDialog(mode: Mode): void {
   showMode(mode);
 }
 
-function card(title: string, mode: Mode | null): { box: HTMLElement; body: HTMLElement } {
+export function card(title: string, mode: Mode | null): { box: HTMLElement; body: HTMLElement } {
   const box = el("div", "qz-card");
   const head = el("div", "qz-card-head");
   if (mode) {
@@ -287,6 +292,7 @@ function showMode(mode: Mode): void {
   const range = el("span", "qz-range");
   range.append("Sayfa aralığı ", fromIn, " – ", toIn);
   src.append(radio("page", `Bu sayfa (s. ${cur.view.page})`), radio("range", range));
+  if (mode === "summary") src.append(radio("all", `Tüm belge (${pc} sayfa)`));
   if (mode === "quiz") {
     src.append(radio("region", pend ? `Panele eklenen bölge (s. ${pend.page})` : "Panele eklenen bölge (önce C ile bir bölge seç)", !pend));
   }
@@ -323,23 +329,26 @@ function showMode(mode: Mode): void {
     );
   } else {
     body.append(el("p", "qz-hint", "Yapay zeka seçtiğin sayfaların yazdırılabilir özetini yazar: başlıklar, önemli formüller, "
-      + "\"sınavda dikkat\" notları. Özet PDF olarak kaydedilir ve yeni sekmede açılır."));
+      + "\"sınavda dikkat\" notları. Özet PDF olarak kaydedilir ve yeni sekmede açılır. "
+      + `${MAX_PAGES} sayfadan uzun aralıklar bölümlere ayrılıp kapaklı, içindekilerli bir ders notuna dönüşür.`));
   }
 
   const go = btn(mode === "quiz" ? "Testi hazırla" : "Özet PDF'ini oluştur", "qz-btn primary wide", () => {
     const pages = pickPages();
     if (!pages) return;
     if (mode === "quiz") saveForm(f);
-    void (mode === "quiz" ? makeQuiz(f, pages) : makeSummary(pages));
+    if (mode === "summary" && pages.length > MAX_PAGES) void import("./notes-pdf").then((m) => m.makeNotes(pages));
+    else void (mode === "quiz" ? makeQuiz(f, pages) : makeSummary(pages));
   });
   body.append(go);
 
   function pickPages(): number[] | null {
     if (f.source === "page") return [cur!.view.page];
     if (f.source === "region") return pend ? [pend.page] : null;
+    if (f.source === "all") return Array.from({ length: pc }, (_, i) => i + 1);
     const a = Math.round(Number(fromIn.value)), b = Math.round(Number(toIn.value));
     if (!(a >= 1 && b >= a && b <= pc)) return null;
-    if (b - a + 1 > MAX_PAGES) return null;
+    if (b - a + 1 > MAX_PAGES && mode !== "summary") return null;
     return Array.from({ length: b - a + 1 }, (_, i) => a + i);
   }
 
@@ -349,8 +358,11 @@ function showMode(mode: Mode): void {
     if (f.source === "range") {
       if (!(a >= 1 && b <= pc)) note = `Sayfalar 1 ile ${pc} arasında olmalı.`;
       else if (b < a) note = "Bitiş sayfası başlangıçtan küçük olamaz.";
-      else if (b - a + 1 > MAX_PAGES) note = `En çok ${MAX_PAGES} sayfa seçebilirsin (şu an ${b - a + 1}).`;
-      else note = `${b - a + 1} sayfa modele gönderilecek.`;
+      else if (b - a + 1 > MAX_PAGES && mode !== "summary") note = `En çok ${MAX_PAGES} sayfa seçebilirsin (şu an ${b - a + 1}).`;
+      else if (b - a + 1 > MAX_PAGES) note = notesPlan(range1(a, b)).text;
+      else note = `${b - a + 1} sayfa modele gönderilecek (1 istek).`;
+    } else if (f.source === "all") {
+      note = pc > MAX_PAGES ? notesPlan(range1(1, pc)).text : `${pc} sayfa modele gönderilecek (1 istek).`;
     } else if (f.source === "region") note = "Yalnızca seçtiğin bölge gönderilir.";
     srcNote.textContent = note;
     srcNote.classList.toggle("bad", f.source === "range" && !pickPages());
@@ -361,11 +373,29 @@ function showMode(mode: Mode): void {
 
 // ------------------------------------------------------------ Üretim (akış + ilerleme + iptal)
 
-interface Progress {
+/** Ders notu üretimi (notes-pdf.ts) sürerken iletişim kutusu açık kalsın */
+export function setJob(c: AbortController | null): void {
+  job = c;
+}
+
+/** Etkin belge ve bildirim (notes-pdf.ts için) */
+export function studyCurrent(): ReturnType<StudyHost["current"]> {
+  return host.current();
+}
+
+export function studyToast(text: string, kind?: "error" | "info"): void {
+  host.toast(text, kind);
+}
+
+export function dialogOpen(): boolean {
+  return !!dialog;
+}
+
+export interface Progress {
   set(text: string, ratio?: number): void;
 }
 
-function progressView(title: string, onCancel: () => void): Progress {
+export function progressView(title: string, onCancel: () => void): Progress {
   const { body } = card(title, null);
   const box = el("div", "qz-progress");
   const spin = el("div", "qz-spin");
@@ -417,7 +447,7 @@ async function sourceImages(view: PdfView, pages: number[], region: boolean, p: 
   return { images, desc };
 }
 
-async function collect(system: string, messages: ChatMessage[], signal: AbortSignal, onText: (all: string) => void): Promise<string> {
+export async function collect(system: string, messages: ChatMessage[], signal: AbortSignal, onText: (all: string) => void): Promise<string> {
   const s = host.settings();
   let text = "";
   await streamChat({
@@ -430,7 +460,7 @@ async function collect(system: string, messages: ChatMessage[], signal: AbortSig
   return text;
 }
 
-function ready(): boolean {
+export function ready(): boolean {
   const why = missing(host.settings());
   if (why) {
     host.toast("Önce yapay zeka ayarlarını tamamla: " + why);
@@ -540,7 +570,7 @@ async function makeSummary(pages: number[]): Promise<void> {
   }
 }
 
-async function saveAndOpen(name: string, bytes: Uint8Array, what: string): Promise<void> {
+export async function saveAndOpen(name: string, bytes: Uint8Array, what: string): Promise<void> {
   let src: PdfSource | null;
   try {
     src = await savePdfAs(name, bytes);

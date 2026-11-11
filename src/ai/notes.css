@@ -1,0 +1,18 @@
+/* Ders notu PDF'i (notes-pdf.ts): yazdırma düzeni quiz.css'teki .qz-print üzerine */
+.qz-print .nt-cover { padding-top: 250px; text-align: left; }
+.qz-print .nt-kicker { font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: #1d3f8a; font-weight: 700; margin-bottom: 10px; }
+.qz-print .nt-cover h1 { font-size: 34px; line-height: 1.2; margin: 0 0 14px; padding-bottom: 14px; border-bottom: 3px solid #1d3f8a; }
+.qz-print .nt-cover .nt-meta { font-size: 14px; color: #4b525c; line-height: 1.7; }
+.qz-print .nt-cover .nt-note { margin-top: 180px; font-size: 12px; color: #6b727c; line-height: 1.5; }
+.qz-print .nt-toc h2 { margin-top: 0; }
+.qz-print .nt-toc-part { margin: 10px 0 2px; font-weight: 700; color: #0f1216; display: flex; justify-content: space-between; gap: 12px; }
+.qz-print .nt-toc-part span { font-weight: 400; color: #6b727c; font-size: 12.5px; white-space: nowrap; }
+.qz-print .nt-toc ol { margin: 0 0 4px; }
+.qz-print .nt-part { margin: 0 0 8px; padding: 6px 10px; background: #eef2fa; border-radius: 4px; color: #1d3f8a; font-size: 12.5px; font-weight: 700; display: flex; justify-content: space-between; }
+.qz-print .nt-part span { font-weight: 400; color: #4b525c; }
+.qz-print .nt-use { margin: -4px 0 10px; padding: 3px 8px; border-left: 3px solid #7aa2e8; background: #f3f6fc; color: #2b3240; font-size: 13px; }
+.qz-print .nt-q { margin: 0 0 10px; display: flex; gap: 8px; }
+.qz-print .nt-q > b { flex: none; min-width: 22px; color: #1d3f8a; }
+.qz-print .nt-q .qz-p-md { flex: 1; min-width: 0; }
+.qz-print .nt-q .nt-line { margin-top: 6px; border-bottom: 1px dotted #b8bec8; height: 18px; }
+.qz-print .nt-q .nt-src { color: #8a919b; font-size: 11.5px; }
