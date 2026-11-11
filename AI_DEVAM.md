@@ -32,6 +32,10 @@ Hepsi sahte sunucularla test edildi; ilk gerçek deneme kullanıcıda:
 
 Kullanıcı hata çıktısı atarsa önce onu düzelt.
 
+## EN ÖNCELİKLİ (kullanıcı geri bildirimi, 12 Kasım)
+1. **Claude'u uygulama içinde kullanmak:** Gemini ile anlatım kalitesi kötü bulundu. Kullanıcı Claude aboneliğiyle, DersApp'in kendi panelinde konuşmak istiyor (aşağıdaki "Claude Code CLI" planı). İlk iş bu.
+2. **Ses:** Windows sistem sesi (Microsoft Tolga) dinlemesi çok kötü bulundu, varsayılan olarak kullanılmamalı. Doğal bir motor ekle (Piper ücretsiz/çevrimdışı; Google, Azure, ElevenLabs ücretli) ve kullanıcıya bir kez dinletip seçtir.
+
 ## Bilinen eksikler / sıradaki fikirler
 - **Linux sesi:** WebKitGTK'da sistem sesi güvenilmez. Plan: Piper (çevrimdışı, Türkçe sesi var) Rust tarafında motor olarak; altyapı hazır (`src/ai/tts-audio.ts`, `tts-engine.ts`, yeni motor = tek dosya). Model ~60 MB: paketle mi, ilk kullanımda mı indirilsin, kullanıcıya sor.
 - **Yeni ses motorları (kullanıcı istedi):** Google Cloud TTS, Azure (Microsoft) ve ElevenLabs için birer motor dosyası (`src/ai/tts-<ad>.ts`, `registerEngine` + `BytesSpeaker`; adımlar `tts.ts` başındaki yorumda). Her birinin kendi anahtar alanı ayarlarda olsun. Şu an ayarlardan yalnızca OpenAI uyumlu servisler ("Özel" sağlayıcı) eklenebiliyor. Güncel API biçimlerini resmi dokümandan doğrula.
