@@ -63,9 +63,9 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 // ------------------------------------------------------------ Kayıt
 
 let stateTimer = 0;
-function persist(): void {
+function persist(now = false): void {
   clearTimeout(stateTimer);
-  stateTimer = window.setTimeout(() => {
+  const run = () => {
     if (active?.view) saved.pos[active.path] = active.view.getPos();
     saved.tabs = tabs.filter((t) => !t.data).map((t) => ({ path: t.path, name: t.name }));
     saved.active = active?.path ?? null;
@@ -75,7 +75,9 @@ function persist(): void {
     const keep = new Set([...saved.recent.map((r) => r.path), ...tabs.map((t) => t.path)]);
     for (const p of Object.keys(saved.pos)) if (!keep.has(p)) delete saved.pos[p];
     backend.saveState(JSON.stringify(saved)).catch((e) => console.error("Ayarlar kaydedilemedi", e));
-  }, 400);
+  };
+  if (now) run();
+  else stateTimer = window.setTimeout(run, 400);
 }
 
 const noteTimers = new Map<string, number>();
@@ -282,7 +284,16 @@ function addRecent(tab: Tab): void {
   persist();
 }
 
-function fileItem(name: string, path: string, isDir: boolean, onClick: () => void): HTMLLIElement {
+/** Dosyayı "Son açılanlar"dan çıkarır; diskteki dosyaya dokunmaz. path verilmezse listeyi boşaltır. */
+function removeRecent(path?: string): void {
+  saved.recent = path ? saved.recent.filter((r) => r.path !== path) : [];
+  renderSidebar();
+  persist(true);
+}
+
+function fileItem(
+  name: string, path: string, isDir: boolean, onClick: () => void, onRemove?: () => void,
+): HTMLLIElement {
   const li = document.createElement("li");
   const btn = document.createElement("button");
   btn.className = isDir ? "dir" : "file";
@@ -298,6 +309,16 @@ function fileItem(name: string, path: string, isDir: boolean, onClick: () => voi
   btn.classList.toggle("current", active?.path === path);
   btn.addEventListener("click", onClick);
   li.append(btn);
+  if (onRemove) {
+    const rm = document.createElement("button");
+    rm.className = "fremove";
+    rm.title = "Listeden kaldır (dosya silinmez)";
+    rm.setAttribute("aria-label", `${label.textContent} öğesini listeden kaldır`);
+    rm.textContent = "×";
+    rm.addEventListener("click", onRemove);
+    li.classList.add("removable");
+    li.append(rm);
+  }
   return li;
 }
 
@@ -339,7 +360,7 @@ function renderSidebar(): void {
   const recent = saved.recent.filter((r) => match(r.name));
   $("recent-section").hidden = recent.length === 0;
   $("recent-list").replaceChildren(
-    ...recent.map((r) => fileItem(r.name, r.path, false, () => openSources([r]))),
+    ...recent.map((r) => fileItem(r.name, r.path, false, () => openSources([r]), () => removeRecent(r.path))),
   );
   $("side-empty").hidden = !!listing || saved.recent.length > 0;
 }
@@ -626,6 +647,7 @@ async function init(): Promise<void> {
   $("btn-sidebar").addEventListener("click", () => toggleSidebar());
   $("btn-folder").addEventListener("click", () => void chooseFolder());
   $("filter").addEventListener("input", renderSidebar);
+  $("btn-clear-recent").addEventListener("click", () => removeRecent());
   $("btn-zoom-in").addEventListener("click", () => zoomBy(1.15));
   $("btn-zoom-out").addEventListener("click", () => zoomBy(1 / 1.15));
   $("btn-zoom-reset").addEventListener("click", () => active?.view?.setScale(1));
@@ -644,6 +666,7 @@ async function init(): Promise<void> {
   window.addEventListener("keydown", onKey);
   // Uygulama kapanırken bekleyen kayıtları hemen yaz
   window.addEventListener("beforeunload", () => {
+    persist(true);
     for (const t of tabs) if (noteTimers.has(t.path)) saveNotesSoon(t, true);
   });
   await backend.onFilesDropped(openSources);

@@ -9,6 +9,7 @@
   --dim: #98a2b0;
   --danger: #e5484d;
   --stage: #2a2d33;
+  --edge: #46505c;
   font-family: "Segoe UI", system-ui, sans-serif;
   font-size: 13px;
   color: var(--fg);
@@ -44,23 +45,27 @@ button:focus-visible, input:focus-visible, .view:focus-visible {
 .view:focus-visible { outline: none; }
 
 button.icon {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   padding: 0;
   display: grid;
   place-items: center;
   flex: none;
+  background: var(--raised);
+  border: 1px solid var(--edge);
+  color: #fff;
 }
 button.icon svg, #tools svg {
   width: 20px;
   height: 20px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.8;
+  stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-button.on { background: var(--accent); color: #fff; }
+button.icon:hover:not(:disabled) { background: var(--hover); border-color: #6b7888; }
+button.on, button.icon.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 button.on:hover:not(:disabled) { background: var(--accent); }
 button.primary { background: var(--accent); color: #fff; padding: 8px 22px; font-size: 14px; }
 button.primary:hover:not(:disabled) { background: #5a91ff; }
@@ -159,7 +164,7 @@ body.no-sidebar #sidebar { display: none; }
   padding: 8px 8px 8px 12px;
   font-weight: 600;
 }
-.side-head button { background: var(--raised); font-weight: 400; }
+.side-head button { background: var(--raised); border: 1px solid var(--edge); font-weight: 400; }
 #filter {
   margin: 0 8px 8px;
   height: 28px;
@@ -189,6 +194,25 @@ body.no-sidebar #sidebar { display: none; }
   padding: 5px 6px;
   text-align: left;
 }
+.file-list li.removable { display: flex; align-items: center; }
+.file-list li.removable > button:first-child { min-width: 0; flex: 1; }
+.file-list .fremove {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  flex: none;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--dim);
+  opacity: 0.45;
+}
+.file-list li:hover .fremove, .file-list .fremove:focus-visible { opacity: 1; color: var(--fg); }
+.file-list .fremove:hover { background: var(--danger); color: #fff; }
+#sidebar h2 { display: flex; align-items: center; justify-content: space-between; }
+#sidebar h2 button { padding: 1px 6px; font-size: 11px; text-transform: none; letter-spacing: 0; color: var(--dim); }
+#sidebar h2 button:hover { color: var(--fg); }
 .file-list .ficon { width: 10px; flex: none; color: var(--dim); font-size: 10px; }
 .file-list .file .ficon::before {
   content: "";
@@ -205,7 +229,7 @@ body.no-sidebar #sidebar { display: none; }
 #side-empty { margin: 4px 0; }
 
 #tools {
-  width: 48px;
+  width: 52px;
   flex: none;
   display: none;
   flex-direction: column;
@@ -218,7 +242,7 @@ body.no-sidebar #sidebar { display: none; }
   scrollbar-width: none;
 }
 body.has-doc #tools { display: flex; }
-#tools button.icon { width: 36px; height: 34px; }
+#tools button.icon { width: 38px; height: 36px; }
 .divider { width: 28px; height: 1px; margin: 5px 0; background: var(--line); flex: none; }
 .palette { display: grid; grid-template-columns: 16px 16px; gap: 5px; flex: none; }
 .swatch {
