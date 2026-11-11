@@ -16,6 +16,7 @@ class Mem {
     this.data.set(k, v);
   }
 }
+const same = (a: unknown, b: unknown) => assert.equal(JSON.stringify(a), JSON.stringify(b));
 let n = 0;
 const t = (name: string, fn: () => void) => {
   try {
@@ -59,7 +60,7 @@ t("halka tampon: kota hatası ve bozuk veri çökertmez", () => {
   log.add({ type: "action", at: 2, action: "free", doc: "x", page: 1 });
   kv.limit = Infinity;
   kv.setItem(EVENTS_KEY, "{bozuk");
-  assert.deepEqual(log.all(), []);
+  same(log.all(), []);
   log.add({ type: "tts", at: 3 });
   assert.equal(log.all().length, 1);
 });
@@ -84,10 +85,10 @@ t("çalışma dakikaları aynı belge ve gün için birleşir", () => {
 
 t("çalışma sayacı: yalnızca etkinken birikir", () => {
   let r = advanceStudy(0, 10_000, true);
-  assert.deepEqual(r, { acc: 10_000, minutes: 0 });
+  same(r, { acc: 10_000, minutes: 0 });
   r = advanceStudy(55_000, 10_000, true);
-  assert.deepEqual(r, { acc: 5_000, minutes: 1 });
-  assert.deepEqual(advanceStudy(5_000, 10_000, false), { acc: 5_000, minutes: 0 });
+  same(r, { acc: 5_000, minutes: 1 });
+  same(advanceStudy(5_000, 10_000, false), { acc: 5_000, minutes: 0 });
   assert.ok(isActive(1000, 1000 - 119_000, true));
   assert.ok(!isActive(1000, 1000 - 121_000, true));
   assert.ok(!isActive(1000, 1000, false));
@@ -129,7 +130,7 @@ t("istatistik: süre, belgeler, konular, eylemler, kontrol soruları", () => {
   assert.match(s, /En çok kullanılan: Anlat \(2\)/);
   assert.match(s, /İlk denemede doğru: 2\/3 \(%67\)/);
   assert.match(s, /Sesli anlatım kullanılan yanıt: 1/);
-  assert.deepEqual(weakTopics(ev), ["Mil hesabı"]);
+  same(weakTopics(ev), ["Mil hesabı"]);
   assert.match(weakHint(ev), /Mil hesabı/);
   assert.equal(weakHint([]), "");
 });
@@ -162,15 +163,15 @@ const P: Profile = {
 
 t("md: birleştir -> ayrıştır gidiş dönüş", () => {
   const md = composeProfile(P);
-  assert.deepEqual(parseProfile(md), P);
+  same(parseProfile(md), P);
   assert.equal(composeProfile(parseProfile(md)), md);
-  assert.deepEqual(parseProfile(composeProfile(emptyProfile())), emptyProfile());
+  same(parseProfile(composeProfile(emptyProfile())), emptyProfile());
   assert.match(md, /^# Öğrenci profili/);
   assert.match(md, /## Benim notlarım[\s\S]*## Öğretmen notu[\s\S]*## İstatistikler/);
 });
 
 t("md: boş ya da bozuk dosya", () => {
-  assert.deepEqual(parseProfile(""), emptyProfile());
+  same(parseProfile(""), emptyProfile());
   const p = parseProfile("\r\n");
   assert.equal(p.notes, "");
 });
@@ -265,12 +266,12 @@ t("yanlış sorular: cevap, doğru cevap, konu; since ve sınır", () => {
     { at: 200, ids: [1], responses: [null, 2, null], ms: 1, correct: 0, total: 1 },
   ]);
   const w = recentWrong([saved], 0);
-  assert.deepEqual(w.map((x) => x.question), ["Soru 1", "Soru 0", "Soru 2"]);
+  same(w.map((x) => x.question), ["Soru 1", "Soru 0", "Soru 2"]);
   assert.equal(w[0].given, "C) üç");
   assert.equal(w[0].correct, "B) iki");
   assert.equal(w[0].topic, "Mil");
   assert.equal(w.find((x) => x.question === "Soru 2")!.given, "boş bırakıldı");
-  assert.deepEqual(recentWrong([saved], 150).map((x) => x.question), ["Soru 1"]);
+  same(recentWrong([saved], 150).map((x) => x.question), ["Soru 1"]);
   const many = sq("m", Array.from({ length: 30 }, (_, i) => mc("S" + i, "T")), [
     { at: 5, ids: Array.from({ length: 30 }, (_, i) => i), responses: Array(30).fill(0), ms: 1, correct: 0, total: 30 },
   ]);
