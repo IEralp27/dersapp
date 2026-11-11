@@ -33,6 +33,9 @@ npm run tauri build
   - `main.ts` sekmeler, dosyalar paneli, araç çubuğu, kısayollar
   - `viewer.ts` PDF görünümü ve sayfa üstü çizim
   - `draw.ts` çizim modeli (şekiller, geri al, silgi)
+  - `select.ts` seç/taşı aracı
+  - `calc.ts`, `calc-engine.ts` hesap makinesi (`node src/calc-engine.test.ts` ile test)
+  - `ai/` yapay zeka paneli; öğretme talimatı `ai/prompts.ts` içinde
   - `backend.ts` Rust tarafına köprü
 - `src-tauri/` Rust tarafı
   - `src/store.rs` dosya okuma, klasör listeleme, ayar ve not kaydı
@@ -49,6 +52,11 @@ npm run tauri build
 | Ctrl + / - / 0 | Yakınlaştır / uzaklaştır / %100 |
 | Ctrl+fare tekerleği | Yakınlaştır |
 | V P H L A R O E | Fare, Kalem, Fosforlu, Çizgi, Ok, Dikdörtgen, Elips, Silgi |
+| S | Seç / Taşı (Delete sil, Ctrl+D çoğalt, Ctrl+A tümünü seç, oklar kaydır) |
+| C | Ekran görüntüsü: bölgeyi çerçevele, yapay zeka paneline gider |
+| T | Beyaz tahta ↔ PDF |
+| Ctrl+K | Hesap makinesi |
+| Ctrl+J | Yapay zeka paneli |
 | 1-8 | Renk |
 | Shift (çizerken) | Düz çizgi, kare, daire |
 | Ctrl+Z / Ctrl+Y | Geri al / ileri al |
