@@ -1,0 +1,11 @@
+/* Sekme görünümü (PDF + beyaz tahta) ve seç/taşı aracı */
+.docview { position: absolute; inset: 0; outline: none; }
+body[data-tool="select"] .page { cursor: default; }
+.sel-box { border-color: var(--accent); background: #3d7eff14; }
+#btn-welcome-board {
+  margin-top: 8px;
+  padding: 7px 20px;
+  font-size: 14px;
+  background: var(--raised);
+  border: 1px solid var(--line);
+}

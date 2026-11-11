@@ -2,7 +2,7 @@
 // böylece yakınlaştırınca çizimler bozulmadan yeniden çizilir.
 
 export type DrawTool = "pen" | "hl" | "line" | "arrow" | "rect" | "oval";
-export type Tool = "none" | DrawTool | "eraser" | "snip";
+export type Tool = "none" | DrawTool | "eraser" | "snip" | "select";
 
 export interface Shape {
   t: DrawTool;
@@ -26,6 +26,8 @@ export class Notes {
   private pages = new Map<number, Shape[]>();
   private undoStack: Action[] = [];
   private redoStack: Action[] = [];
+  /** Beyaz tahta: kaç sayfa olduğu (kaydedilir; PDF'lerde 0) */
+  pageCount = 0;
   /** Bir sayfanın çizimleri değişince çağrılır. */
   onChange: (page: number) => void = () => {};
 
@@ -77,6 +79,13 @@ export class Notes {
     return this.redoStack.length > 0;
   }
 
+  /** Çizim bulunan en büyük sayfa numarası (yoksa 0) */
+  get lastPage(): number {
+    let n = 0;
+    for (const p of this.pages.keys()) n = Math.max(n, p);
+    return n;
+  }
+
   private set(page: number, shapes: Shape[]): void {
     if (shapes.length) this.pages.set(page, shapes);
     else this.pages.delete(page);
@@ -88,7 +97,7 @@ export class Notes {
     for (const [n, list] of this.pages) {
       pages[n] = list.map((s) => ({ t: s.t, c: s.c, w: r2(s.w), p: s.p.map(r2) }));
     }
-    return JSON.stringify({ v: 1, pages });
+    return JSON.stringify(this.pageCount ? { v: 1, n: this.pageCount, pages } : { v: 1, pages });
   }
 
   static fromJSON(text: string | null): Notes {
@@ -96,6 +105,7 @@ export class Notes {
     if (!text) return notes;
     try {
       const raw = JSON.parse(text);
+      if (Number.isInteger(raw.n) && raw.n > 0) notes.pageCount = Math.min(raw.n, 10_000);
       for (const [n, list] of Object.entries(raw.pages ?? {})) {
         const ok = (list as Shape[]).filter(
           (s) => s && typeof s.t === "string" && Array.isArray(s.p) && s.p.length >= 4,
@@ -175,7 +185,7 @@ export function drawShape(ctx: CanvasRenderingContext2D, s: Shape): void {
 }
 
 /** Şeklin çizgisini nokta dizisi olarak verir (silgi isabet testi için). */
-function outline(s: Shape): number[] {
+export function outline(s: Shape): number[] {
   const [x0, y0, x1, y1] = s.p;
   if (s.t === "rect") return [x0, y0, x1, y0, x1, y1, x0, y1, x0, y0];
   if (s.t === "oval") {
@@ -216,4 +226,60 @@ export function constrain(t: DrawTool, x0: number, y0: number, x: number, y: num
   }
   const d = Math.max(Math.abs(dx), Math.abs(dy));
   return [x0 + Math.sign(dx || 1) * d, y0 + Math.sign(dy || 1) * d];
+}
+
+// ------------------------------------------------------------ Seçim yardımcıları
+
+/** Şekillere oturum boyunca değişmeyen kimlik: taşınan kopya aynı kimliği taşır,
+ *  böylece geri al/ileri al sonrası seçim aynı şekli göstermeye devam eder. */
+const ids = new WeakMap<Shape, number>();
+let nextId = 1;
+
+export function shapeId(s: Shape): number {
+  let id = ids.get(s);
+  if (id === undefined) {
+    id = nextId++;
+    ids.set(s, id);
+  }
+  return id;
+}
+
+/** Kaydırılmış kopya (aynı kimlikle). */
+export function moveShape(s: Shape, dx: number, dy: number): Shape {
+  const out: Shape = { ...s, p: s.p.map((v, i) => v + (i % 2 ? dy : dx)) };
+  ids.set(out, shapeId(s));
+  return out;
+}
+
+/** Kaydırılmış kopya (yeni kimlikle) — çoğaltma için. */
+export function copyShape(s: Shape, dx: number, dy: number): Shape {
+  return { ...s, p: s.p.map((v, i) => v + (i % 2 ? dy : dx)) };
+}
+
+export type Box = [number, number, number, number];
+
+/** Şeklin çizgi kalınlığı dahil sınır kutusu: [x0, y0, x1, y1] */
+export function shapeBounds(s: Shape): Box {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  const pts = outline(s);
+  for (let i = 0; i < pts.length - 1; i += 2) {
+    x0 = Math.min(x0, pts[i]);
+    x1 = Math.max(x1, pts[i]);
+    y0 = Math.min(y0, pts[i + 1]);
+    y1 = Math.max(y1, pts[i + 1]);
+  }
+  const pad = s.t === "hl" ? s.w * 2 : s.t === "arrow" ? s.w * 3 + 6 : s.w / 2;
+  return [x0 - pad, y0 - pad, x1 + pad, y1 + pad];
+}
+
+/** Kutuya değen şekiller: tamamen içinde olan ya da çizgisinden bir noktası kutuda kalan. */
+export function shapeInBox(s: Shape, b: Box): boolean {
+  const [x0, y0, x1, y1] = shapeBounds(s);
+  if (x1 < b[0] || x0 > b[2] || y1 < b[1] || y0 > b[3]) return false;
+  if (x0 >= b[0] && x1 <= b[2] && y0 >= b[1] && y1 <= b[3]) return true;
+  const pts = outline(s);
+  for (let i = 0; i < pts.length - 1; i += 2) {
+    if (pts[i] >= b[0] && pts[i] <= b[2] && pts[i + 1] >= b[1] && pts[i + 1] <= b[3]) return true;
+  }
+  return false;
 }

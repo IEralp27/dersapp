@@ -1,9 +1,14 @@
-// Tek bir PDF'in görünümü: sayfalar alt alta, yalnızca ekrana yakın olanlar çizilir.
+// Sayfa görünümü: sayfalar alt alta, yalnızca ekrana yakın olanlar çizilir.
+// Sayfa kaynağı bir PDF ya da boş beyaz tahta sayfaları olabilir (PageView);
+// PdfView bir sekmenin PDF'ini ve ona ait beyaz tahtayı bir arada tutar.
 import * as pdfjs from "pdfjs-dist";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import * as backend from "./backend";
 import { Notes, constrain, drawShape, hitShape } from "./draw";
 import type { DrawTool, Shape, Tool } from "./draw";
+import { Selection } from "./select";
+import "./viewer.css";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 const ASSETS = new URL("pdfjs/", document.baseURI).href;
@@ -12,6 +17,14 @@ const ASSETS = new URL("pdfjs/", document.baseURI).href;
 const MAX_PIXELS = 16_000_000;
 export const MIN_SCALE = 0.25;
 export const MAX_SCALE = 5;
+
+/** Beyaz tahta sayfası boyutu (yatay A4, sayfa birimi) */
+const BOARD_W = 842;
+const BOARD_H = 595;
+/** Bağımsız beyaz tahta sekmesinin yolu (not kaydı anahtarı da budur) */
+export const BOARD_TAB = "board:tahta";
+/** PDF'e ait tahtanın not anahtarı: PDF yolu + bu ek */
+const BOARD_SUFFIX = "#tahta";
 
 export interface ToolState {
   tool: Tool;
@@ -48,15 +61,19 @@ interface Stroke {
   shape: Shape | null;
   /** silgi: sürükleme başındaki çizimler */
   before: Shape[] | null;
-  /** ekran görüntüsü aracı: seçim çerçevesi */
+  /** ekran görüntüsü / kutu seçimi: çerçeve */
   snip: HTMLDivElement | null;
+  /** seç/taşı aracı: sürükleme mi kutu seçimi mi */
+  sel: "move" | "box" | null;
+  /** kutu seçiminde Shift basılı mıydı */
+  shift: boolean;
   x0: number;
   y0: number;
 }
 
 export class PdfError extends Error {}
 
-export class PdfView {
+export class PageView {
   readonly el = document.createElement("div");
   private pagesEl = document.createElement("div");
   private slots: Slot[] = [];
@@ -66,6 +83,9 @@ export class PdfView {
   private inkFrame = 0;
   private scrollFrame = 0;
   private disposed = false;
+  readonly selection: Selection;
+  /** Gizlenmeden önceki konum (yeniden gösterilince dönülür) */
+  lastPos: ViewPos | null = null;
 
   scale = 1;
   fit = true;
@@ -74,12 +94,15 @@ export class PdfView {
   onInfo: () => void = () => {};
 
   private constructor(
-    private doc: PDFDocumentProxy,
+    /** null: beyaz tahta (sayfalar boş, sona otomatik sayfa eklenir) */
+    private doc: PDFDocumentProxy | null,
     private tools: ToolState,
     readonly notes: Notes,
   ) {
     this.el.className = "view";
     this.el.tabIndex = 0;
+    this.el.classList.toggle("board", !doc);
+    this.selection = new Selection(notes);
     this.pagesEl.className = "pages";
     this.el.append(this.pagesEl);
 
@@ -100,10 +123,14 @@ export class PdfView {
     this.pagesEl.addEventListener("pointermove", (e) => this.onMove(e));
     this.pagesEl.addEventListener("pointerup", (e) => this.onUp(e));
     this.pagesEl.addEventListener("pointercancel", (e) => this.onUp(e));
+    this.el.addEventListener("keydown", (e) => this.onKey(e));
 
     this.notes.onChange = (page) => {
+      this.selection.prune(page);
       const slot = this.slots[page - 1];
       if (slot) this.queueInk(slot);
+      // Tahtada son sayfaya çizilince sona yeni boş sayfa
+      if (!this.doc && page === this.slots.length && this.notes.get(page).length) this.addSlot(BOARD_W, BOARD_H);
       this.onNotesChanged();
     };
   }
@@ -113,7 +140,7 @@ export class PdfView {
   /** Ekran görüntüsü aracıyla bir bölge seçilince çağrılır (PDF + çizimler birlikte). */
   onSnip: (image: HTMLCanvasElement, page: number) => void = () => {};
 
-  static async open(data: Uint8Array, tools: ToolState, notesJson: string | null): Promise<PdfView> {
+  static async open(data: Uint8Array, tools: ToolState, notesJson: string | null): Promise<PageView> {
     let doc: PDFDocumentProxy;
     try {
       doc = await pdfjs.getDocument({
@@ -130,23 +157,37 @@ export class PdfView {
       if (name === "InvalidPDFException") throw new PdfError("Bu dosya bozuk ya da geçerli bir PDF değil.");
       throw new PdfError("PDF açılamadı: " + ((e as Error)?.message ?? e));
     }
-    const view = new PdfView(doc, tools, Notes.fromJSON(notesJson));
+    const view = new PageView(doc, tools, Notes.fromJSON(notesJson));
     const first = (await doc.getPage(1)).getViewport({ scale: 1 });
-    for (let num = 1; num <= doc.numPages; num++) {
-      const el = document.createElement("div");
-      el.className = "page";
-      el.dataset.num = String(num);
-      // Gerçek boyut sayfa çizilirken öğrenilir; o zamana kadar ilk sayfanınki varsayılır.
-      const slot: Slot = {
-        num, el, w: first.width, h: first.height,
-        canvas: null, ink: null, task: null, rendered: 0, near: false, gen: 0,
-      };
-      view.slots.push(slot);
-      view.sizeSlot(slot);
-      view.pagesEl.append(el);
-      view.io.observe(el);
-    }
+    // Gerçek boyut sayfa çizilirken öğrenilir; o zamana kadar ilk sayfanınki varsayılır.
+    for (let num = 1; num <= doc.numPages; num++) view.addSlot(first.width, first.height);
     return view;
+  }
+
+  /** Boş beyaz sayfalardan oluşan tahta. Sayfa sayısı notlarla birlikte saklanır. */
+  static board(tools: ToolState, notesJson: string | null): PageView {
+    const notes = Notes.fromJSON(notesJson);
+    const view = new PageView(null, tools, notes);
+    // En sonda her zaman boş bir sayfa olsun
+    const count = Math.max(1, notes.pageCount, notes.lastPage + 1);
+    for (let i = 0; i < count; i++) view.addSlot(BOARD_W, BOARD_H);
+    return view;
+  }
+
+  private addSlot(w: number, h: number): void {
+    const num = this.slots.length + 1;
+    const el = document.createElement("div");
+    el.className = "page";
+    el.dataset.num = String(num);
+    const slot: Slot = { num, el, w, h, canvas: null, ink: null, task: null, rendered: 0, near: false, gen: 0 };
+    this.slots.push(slot);
+    this.sizeSlot(slot);
+    this.pagesEl.append(el);
+    this.io.observe(el);
+    if (!this.doc) {
+      this.notes.pageCount = this.slots.length;
+      if (num > 1) this.onInfo();
+    }
   }
 
   get pageCount(): number {
@@ -277,11 +318,15 @@ export class PdfView {
   private async render(slot: Slot): Promise<void> {
     const scale = this.scale;
     if (slot.rendered === scale) return;
+    if (!this.doc) {
+      slot.rendered = scale; // tahta: arka plan CSS ile beyaz, çizilecek bir şey yok
+      return;
+    }
     const gen = ++slot.gen;
     slot.task?.cancel();
     slot.task = null;
     try {
-      const page = await this.doc.getPage(slot.num);
+      const page = await this.doc!.getPage(slot.num);
       if (this.disposed || gen !== slot.gen || !slot.near) return;
       const base = page.getViewport({ scale: 1 });
       if (Math.abs(base.width - slot.w) > 0.5 || Math.abs(base.height - slot.h) > 0.5) {
@@ -372,6 +417,7 @@ export class PdfView {
     for (const s of shapes) if (s.t === "hl") drawShape(ctx, s);
     for (const s of shapes) if (s.t !== "hl") drawShape(ctx, s);
     if (live) drawShape(ctx, live);
+    if (this.selection.page === slot.num) this.selection.draw(ctx, this.scale);
   }
 
   private toPage(slot: Slot, e: PointerEvent): [number, number] {
@@ -388,29 +434,42 @@ export class PdfView {
     const slot = pageEl && this.slots[Number(pageEl.dataset.num) - 1];
     if (!slot) return;
     e.preventDefault();
+    this.el.focus({ preventScroll: true }); // seçim kısayolları için
     this.pagesEl.setPointerCapture(e.pointerId);
     const [x, y] = this.toPage(slot, e);
+    const base = { slot, pointerId: e.pointerId, shape: null, before: null, snip: null, sel: null, shift: e.shiftKey, x0: x, y0: y };
+    if (tool === "select") return this.selectDown(base, e.shiftKey);
     if (tool === "snip") {
-      const box = document.createElement("div");
-      box.className = "snip-box";
-      slot.el.append(box);
-      this.stroke = { slot, pointerId: e.pointerId, shape: null, before: null, snip: box, x0: x, y0: y };
+      this.stroke = { ...base, snip: this.makeBox(slot, "snip-box") };
       this.placeSnip(this.stroke, x, y);
       return;
     }
     if (tool === "eraser") {
-      this.stroke = { slot, pointerId: e.pointerId, shape: null, before: this.notes.get(slot.num), snip: null, x0: x, y0: y };
+      this.stroke = { ...base, before: this.notes.get(slot.num) };
       this.eraseAt(slot, x, y);
       return;
     }
     const shape: Shape = { t: tool, c: this.tools.color, w: this.tools.size, p: [x, y, x, y] };
-    this.stroke = { slot, pointerId: e.pointerId, shape, before: null, snip: null, x0: x, y0: y };
+    this.stroke = { ...base, shape };
     this.queueInk(slot);
+  }
+
+  private makeBox(slot: Slot, cls: string): HTMLDivElement {
+    const box = document.createElement("div");
+    box.className = cls;
+    slot.el.append(box);
+    return box;
   }
 
   private onMove(e: PointerEvent): void {
     const st = this.stroke;
-    if (!st || e.pointerId !== st.pointerId) return;
+    if (!st) return this.selectHover(e);
+    if (e.pointerId !== st.pointerId) return;
+    if (st.sel === "move") {
+      const [x, y] = this.toPage(st.slot, e);
+      this.notes.setLive(st.slot.num, this.selection.moved(st.before!, x - st.x0, y - st.y0));
+      return;
+    }
     if (st.snip) {
       this.placeSnip(st, ...this.toPage(st.slot, e));
       return;
@@ -448,9 +507,17 @@ export class PdfView {
     if (!st || e.pointerId !== st.pointerId) return;
     this.stroke = null;
     if (this.pagesEl.hasPointerCapture(e.pointerId)) this.pagesEl.releasePointerCapture(e.pointerId);
+    if (st.sel === "move") {
+      // Sürükleme boyunca tek geri-al adımı
+      const after = this.notes.get(st.slot.num);
+      if (after !== st.before) this.notes.commit(st.slot.num, after, st.before!);
+      return;
+    }
     if (st.snip) {
       st.snip.remove();
-      if (e.type === "pointerup") this.finishSnip(st, ...this.toPage(st.slot, e));
+      if (e.type !== "pointerup") return;
+      if (st.sel === "box") this.finishBox(st, ...this.toPage(st.slot, e));
+      else this.finishSnip(st, ...this.toPage(st.slot, e));
       return;
     }
     if (st.before) {
@@ -483,8 +550,9 @@ export class PdfView {
     const { slot, x0, y0 } = st;
     const left = Math.min(x0, x), top = Math.min(y0, y);
     const w = Math.abs(x - x0), h = Math.abs(y - y0);
-    if (!slot.canvas || w * this.scale < 8 || h * this.scale < 8) return; // yanlışlıkla tıklama
-    const k = slot.canvas.width / slot.w; // sayfa birimi başına piksel
+    if (!slot.rendered || w * this.scale < 8 || h * this.scale < 8) return; // yanlışlıkla tıklama
+    // sayfa birimi başına piksel (tahtada PDF tuvali yok)
+    const k = slot.canvas ? slot.canvas.width / slot.w : this.scale * this.pixelRatio(slot);
     const out = document.createElement("canvas");
     out.width = Math.max(1, Math.round(w * k));
     out.height = Math.max(1, Math.round(h * k));
@@ -506,12 +574,235 @@ export class PdfView {
     if (kept.length !== shapes.length) this.notes.setLive(slot.num, kept);
   }
 
+  // ------------------------------------------------------------ Seç / Taşı
+
+  private selectDown(base: Stroke, shift: boolean): void {
+    const { slot, x0: x, y0: y } = base;
+    const sel = this.selection;
+    const shapes = this.notes.get(slot.num);
+    const r = 6 / this.scale;
+    const hit = Selection.pick(shapes, x, y, r);
+    if (shift && hit) {
+      // Shift+tık: seçime ekle / çıkar
+      this.redrawSelection(() => sel.add(slot.num, [hit], true));
+      return;
+    }
+    if (!shift && (hit || sel.inBounds(slot.num, x, y, r))) {
+      // Seçili olmayan şekle tıklandıysa yalnız onu seç; sonra sürükleyerek taşı
+      if (hit && !sel.has(hit)) this.redrawSelection(() => sel.set(slot.num, [hit]));
+      this.stroke = { ...base, sel: "move", before: shapes };
+      return;
+    }
+    // Boş yer: kutu ile seçim (Shift ile mevcut seçime eklenir)
+    if (!shift) this.redrawSelection(() => sel.clear());
+    this.stroke = { ...base, sel: "box", snip: this.makeBox(slot, "snip-box sel-box") };
+    this.placeSnip(this.stroke, x, y);
+  }
+
+  private finishBox(st: Stroke, x: number, y: number): void {
+    const box: [number, number, number, number] = [Math.min(st.x0, x), Math.min(st.y0, y), Math.max(st.x0, x), Math.max(st.y0, y)];
+    if ((box[2] - box[0]) * this.scale < 3 && (box[3] - box[1]) * this.scale < 3) return; // tıklama
+    const found = Selection.inBox(this.notes.get(st.slot.num), box);
+    this.redrawSelection(() => {
+      if (st.shift) this.selection.add(st.slot.num, found, false);
+      else this.selection.set(st.slot.num, found);
+    });
+  }
+
+  /** Seçimi değiştirir; eski ve yeni sayfanın çizim katmanını yeniler. */
+  private redrawSelection(change: () => void): void {
+    const before = this.selection.page;
+    change();
+    for (const n of [before, this.selection.page]) {
+      const slot = this.slots[n - 1];
+      if (slot) this.queueInk(slot);
+    }
+  }
+
+  /** Seçili şeklin üstündeyken taşıma imleci */
+  private selectHover(e: PointerEvent): void {
+    if (this.tools.tool !== "select" || !this.selection.size) {
+      if (this.pagesEl.style.cursor) this.pagesEl.style.cursor = "";
+      return;
+    }
+    const pageEl = (e.target as HTMLElement).closest<HTMLElement>(".page");
+    const slot = pageEl && this.slots[Number(pageEl.dataset.num) - 1];
+    const over = !!slot && this.selection.inBounds(slot.num, ...this.toPage(slot, e), 6 / this.scale);
+    this.pagesEl.style.cursor = over ? "move" : "";
+  }
+
+  /** Araç değişince çağrılır: seç/taşı dışındaki araçlarda seçim bırakılır. */
+  syncTool(): void {
+    if (this.tools.tool !== "select" && this.selection.size) this.redrawSelection(() => this.selection.clear());
+    if (this.tools.tool !== "select") this.pagesEl.style.cursor = "";
+  }
+
+  private onKey(e: KeyboardEvent): void {
+    if (this.tools.tool !== "select" || this.stroke || e.altKey) return;
+    const sel = this.selection;
+    const ctrl = e.ctrlKey || e.metaKey;
+    const key = e.key.toLowerCase();
+    let run: (() => void) | null = null;
+    if (ctrl && key === "a") {
+      run = () => sel.set(this.page, this.notes.get(this.page));
+    } else if (ctrl && key === "d") {
+      run = () => sel.duplicate(); // seçim yoksa da tarayıcının yer imi kısayolu çalışmasın
+    } else if (!ctrl && sel.size) {
+      const step = e.shiftKey ? 10 : 1;
+      const arrows: Record<string, [number, number]> = {
+        arrowleft: [-step, 0], arrowright: [step, 0], arrowup: [0, -step], arrowdown: [0, step],
+      };
+      if (arrows[key]) run = () => sel.nudge(...arrows[key]);
+      else if (key === "delete" || key === "backspace") run = () => sel.remove();
+      else if (key === "escape") run = () => sel.clear();
+    }
+    if (!run) return;
+    e.preventDefault();
+    e.stopPropagation(); // uygulama kısayolları (ör. Esc = Fare aracı) çalışmasın
+    this.redrawSelection(run);
+  }
+
   dispose(): void {
     this.disposed = true;
     this.io.disconnect();
     this.ro.disconnect();
     for (const slot of this.slots) this.release(slot);
     this.el.remove();
-    void this.doc.loadingTask.destroy();
+    void this.doc?.loadingTask.destroy();
+  }
+}
+
+/**
+ * Bir sekmenin görünümü: PDF ve ona ait beyaz tahta (T ile geçiş).
+ * Bağımsız tahta sekmesinde yalnızca tahta vardır.
+ */
+export class PdfView {
+  readonly el = document.createElement("div");
+  private board: PageView | null = null;
+  private cur: PageView;
+  private dirty = new Set<PageView>();
+  private boardLoading: Promise<void> | null = null;
+  private disposed = false;
+
+  onInfo: () => void = () => {};
+  onNotesChanged: () => void = () => {};
+  onSnip: (image: HTMLCanvasElement, page: number) => void = () => {};
+
+  private constructor(
+    private readonly path: string,
+    private readonly tools: ToolState,
+    private readonly pdf: PageView | null,
+    board: PageView | null,
+  ) {
+    this.el.className = "docview";
+    this.el.tabIndex = -1;
+    // Odak her zaman görünen sayfa alanına gitsin (kaydırma ve seçim kısayolları için)
+    this.el.addEventListener("focus", () => this.cur.el.focus({ preventScroll: true }));
+    this.cur = (pdf ?? board)!;
+    for (const v of [pdf, board]) if (v) this.adopt(v);
+    this.board = board;
+  }
+
+  static async open(path: string, data: Uint8Array, tools: ToolState, notesJson: string | null): Promise<PdfView> {
+    return new PdfView(path, tools, await PageView.open(data, tools, notesJson), null);
+  }
+
+  /** Bağımsız beyaz tahta sekmesi */
+  static board(path: string, tools: ToolState, notesJson: string | null): PdfView {
+    return new PdfView(path, tools, null, PageView.board(tools, notesJson));
+  }
+
+  private adopt(v: PageView): void {
+    v.onInfo = () => {
+      if (v === this.cur) this.onInfo();
+    };
+    v.onNotesChanged = () => {
+      this.dirty.add(v);
+      this.onNotesChanged();
+    };
+    v.onSnip = (image, page) => this.onSnip(image, page);
+    v.el.hidden = v !== this.cur;
+    this.el.append(v.el);
+  }
+
+  private get boardKey(): string {
+    return this.pdf ? this.path + BOARD_SUFFIX : this.path;
+  }
+
+  /** Şu an beyaz tahta mı gösteriliyor? */
+  get onBoard(): boolean {
+    return this.cur === this.board;
+  }
+  /** Bağımsız tahta sekmesi mi (geçilecek PDF yok)? */
+  get boardOnly(): boolean {
+    return !this.pdf;
+  }
+
+  get notes(): Notes { return this.cur.notes; }
+  get page(): number { return this.cur.page; }
+  get pageCount(): number { return this.cur.pageCount; }
+  get scale(): number { return this.cur.scale; }
+  get fit(): boolean { return this.cur.fit; }
+  setScale(scale: number): void { this.cur.setScale(scale); }
+  setFit(): void { this.cur.setFit(); }
+  goToPage(num: number): void { this.cur.goToPage(num); }
+
+  /** Kaydedilen konum her zaman PDF'inki (tahtadayken de PDF'te kalınan yer korunur). */
+  getPos(): ViewPos {
+    const main = (this.pdf ?? this.board)!;
+    return main === this.cur || !main.lastPos ? main.getPos() : main.lastPos;
+  }
+  restore(pos: Partial<ViewPos>): void {
+    (this.pdf ?? this.board)!.restore(pos);
+  }
+
+  syncTool(): void {
+    this.pdf?.syncTool();
+    this.board?.syncTool();
+  }
+
+  /** PDF ↔ beyaz tahta. Tahta ilk kez açılırken kayıtlı çizimleri yüklenir. */
+  async toggleBoard(): Promise<void> {
+    if (!this.pdf) return;
+    if (this.onBoard) return this.show(this.pdf);
+    if (!this.board) {
+      this.boardLoading ??= backend.loadNotes(this.boardKey).then((json) => {
+        if (this.disposed || this.board) return;
+        this.board = PageView.board(this.tools, json);
+        this.adopt(this.board);
+      }).finally(() => {
+        this.boardLoading = null;
+      });
+      await this.boardLoading;
+      if (this.disposed || !this.board) return;
+    }
+    this.show(this.board);
+  }
+
+  private show(v: PageView): void {
+    if (v === this.cur) return;
+    this.cur.lastPos = this.cur.getPos();
+    this.cur.el.hidden = true;
+    this.cur = v;
+    v.el.hidden = false;
+    v.restore(v.lastPos ?? {});
+    v.el.focus({ preventScroll: true });
+    this.syncTool();
+    this.onInfo();
+  }
+
+  /** Değişen çizimleri (PDF'in ve tahtanın) kaydeder. */
+  async save(): Promise<void> {
+    const jobs: Promise<void>[] = [];
+    for (const v of this.dirty) jobs.push(backend.saveNotes(v === this.pdf ? this.path : this.boardKey, v.notes.toJSON()));
+    this.dirty.clear();
+    await Promise.all(jobs);
+  }
+
+  dispose(): void {
+    this.disposed = true;
+    this.pdf?.dispose();
+    this.board?.dispose();
+    this.el.remove();
   }
 }

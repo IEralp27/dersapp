@@ -2,7 +2,7 @@
 import * as backend from "./backend";
 import type { Entry, Listing, PdfSource } from "./backend";
 import type { Tool } from "./draw";
-import { PdfError, PdfView } from "./viewer";
+import { BOARD_TAB, PdfError, PdfView } from "./viewer";
 import type { ToolState, ViewPos } from "./viewer";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -79,7 +79,7 @@ function saveNotesSoon(tab: Tab, now = false): void {
   const run = () => {
     noteTimers.delete(tab.path);
     if (!tab.view) return;
-    backend.saveNotes(tab.path, tab.view.notes.toJSON())
+    tab.view.save()
       .catch((e) => toast("Çizimler kaydedilemedi: " + message(e)));
   };
   if (now) run();
@@ -100,6 +100,7 @@ function renderTabs(): void {
   $("welcome").hidden = tabs.length > 0;
   $("doc-controls").hidden = !hasDoc;
   document.body.classList.toggle("has-doc", hasDoc);
+  $("btn-board").classList.toggle("on", !!active?.view?.onBoard);
   active?.btn.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
 
@@ -136,12 +137,14 @@ function load(tab: Tab): Promise<void> {
   tab.btn.classList.add("loading");
   tab.loading = (async () => {
     try {
+      const board = tab.path === BOARD_TAB;
       const [data, notes] = await Promise.all([
-        tab.data ?? backend.readPdf(tab.path),
+        board ? null : tab.data ?? backend.readPdf(tab.path),
         backend.loadNotes(tab.path).catch(() => ""),
       ]);
       // PDF.js baytları kendi iş parçacığına taşır; elimizdeki kopya bozulmasın
-      const view = await PdfView.open(tab.data ? data.slice() : data, tools, notes);
+      const view = data ? await PdfView.open(tab.path, tab.data ? data.slice() : data, tools, notes)
+        : PdfView.board(tab.path, tools, notes);
       if (!tabs.includes(tab)) {
         view.dispose(); // yüklenirken sekme kapatıldı
         return;
@@ -268,7 +271,7 @@ function zoomBy(factor: number): void {
 // ------------------------------------------------------------ Dosyalar paneli
 
 function addRecent(tab: Tab): void {
-  if (tab.data) return; // diskte yolu olmayan dosya sonradan açılamaz
+  if (tab.data || tab.path === BOARD_TAB) return; // diskte yolu olmayan dosya sonradan açılamaz
   saved.recent = [{ path: tab.path, name: tab.name }, ...saved.recent.filter((r) => r.path !== tab.path)].slice(0, 15);
   renderSidebar();
   persist();
@@ -373,6 +376,7 @@ function toggleSidebar(show = !saved.sidebar): void {
 
 const TOOLS: { id: Tool; label: string; key: string; icon: string }[] = [
   { id: "none", label: "Fare", key: "V", icon: "M6 3l12 9-5 1 3 6-2 1-3-6-5 4z" },
+  { id: "select", label: "Seç / Taşı", key: "S", icon: "M3 3h3M9 3h3M3 3v3M3 9v3M12 12l9 3-4 2-2 4z" },
   { id: "pen", label: "Kalem", key: "P", icon: "M4 20l1-4L16 5l3 3L8 19zM14 7l3 3" },
   { id: "hl", label: "Fosforlu", key: "H", icon: "M9 14l6-9 4 3-6 9zM9 14l-3 5h5l2-2M4 21h16" },
   { id: "line", label: "Çizgi", key: "L", icon: "M5 19L19 5" },
@@ -474,6 +478,7 @@ function renderToolState(): void {
   colorInput.classList.toggle("on", !swatches.has(tools.color));
   sizeInput.value = String(tools.size);
   document.body.dataset.tool = tools.tool;
+  active?.view?.syncTool();
   const notes = active?.view?.notes;
   undoBtn.disabled = !notes?.canUndo;
   redoBtn.disabled = !notes?.canRedo;
@@ -495,6 +500,21 @@ function redo(): void {
 function clearPage(): void {
   const view = active?.view;
   if (view) view.notes.clearPage(view.page); // Ctrl+Z ile geri alınabilir
+}
+
+/** PDF ↔ beyaz tahta (T). Açık sekme yoksa bağımsız tahta sekmesi açılır. */
+async function toggleBoard(): Promise<void> {
+  if (!active || active.view?.boardOnly) {
+    if (!active) openSources([{ path: BOARD_TAB, name: "Beyaz tahta" }]);
+    return;
+  }
+  try {
+    await active.view?.toggleBoard();
+  } catch (e) {
+    toast("Beyaz tahta açılamadı: " + message(e));
+  }
+  renderTabs();
+  renderToolState();
 }
 
 // ------------------------------------------------------------ Ekran görüntüsü
@@ -546,6 +566,7 @@ function onKey(e: KeyboardEvent): void {
   }
   if (typing || e.altKey) return;
   if (key === "escape") return setTool("none");
+  if (key === "t") return void toggleBoard();
   const tool = TOOLS.find((t) => t.key.toLowerCase() === key);
   if (tool) return setTool(tool.id);
   const n = Number(e.key);
@@ -570,6 +591,8 @@ async function init(): Promise<void> {
 
   $("btn-open").addEventListener("click", () => void openDialog());
   $("btn-welcome-open").addEventListener("click", () => void openDialog());
+  $("btn-board").addEventListener("click", () => void toggleBoard());
+  $("btn-welcome-board").addEventListener("click", () => openSources([{ path: BOARD_TAB, name: "Beyaz tahta" }]));
   $("btn-sidebar").addEventListener("click", () => toggleSidebar());
   $("btn-folder").addEventListener("click", () => void chooseFolder());
   $("filter").addEventListener("input", renderSidebar);
