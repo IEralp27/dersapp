@@ -17,6 +17,7 @@ import {
   LESSON_SYSTEM_PROMPT, SYSTEM_PROMPT, lessonAskRequest, lessonCheckRequest, lessonPageRequest,
 } from "./prompts";
 import { AiError, currentConfig, missing, streamChat } from "./providers";
+import { learnerAction, learnerCheck, systemWithProfile } from "./learner-ui";
 import type { ChatImage, ChatMessage, Settings } from "./providers";
 import { ttsAttach, ttsPause, ttsPlay, ttsResume, ttsStateOf, ttsUsable, stop as ttsStop } from "./tts";
 import type { TtsTurn } from "./tts";
@@ -320,7 +321,7 @@ async function loadPage(): Promise<void> {
       carried: carriedFor(les.carried, page), again: les.flow.again,
     }) + actionHint(),
   }];
-  const text = await request(systemWithMarks(LESSON_SYSTEM_PROMPT), msgs, body, wrap);
+  const text = await request(systemWithProfile(systemWithMarks(LESSON_SYSTEM_PROMPT)), msgs, body, wrap);
   if (text === null || L !== les) return;
   const r = parseLessonReply(text);
   les.msgs = [...msgs, { role: "assistant", text }];
@@ -339,7 +340,7 @@ async function checkAnswer(answer: string): Promise<void> {
   const attempt = les.flow.attempts;
   const { wrap, content, body } = lessonTurn(`Ders · s. ${les.flow.page} · değerlendirme`);
   const msgs: ChatMessage[] = [...les.msgs, { role: "user", text: lessonCheckRequest(answer, attempt) }];
-  const text = await request(systemWithMarks(LESSON_SYSTEM_PROMPT), msgs, body, wrap);
+  const text = await request(systemWithProfile(systemWithMarks(LESSON_SYSTEM_PROMPT)), msgs, body, wrap);
   if (text === null || L !== les) return;
   const r = parseLessonReply(text);
   les.msgs = [...msgs, { role: "assistant", text }];
@@ -349,6 +350,7 @@ async function checkAnswer(answer: string): Promise<void> {
   const q = verdict === "wrong" && attempt <= 1 ? r.question : "";
   if (q) les.question = q;
   setSpeech(wrap, content, body, r.visible, q);
+  if (attempt <= 1) learnerCheck(les.name, verdict === "correct"); // ilk denemede doğru mu
   dispatch({ t: "checked", verdict, question: !!q });
 }
 
@@ -357,6 +359,7 @@ let pendingAsk = "";
 
 async function askFree(question: string): Promise<void> {
   const les = L!;
+  learnerAction("free", les.name, les.flow.page); // yalnızca tür; soru metni kaydedilmez
   const view = viewOf(les.path);
   let image = les.image;
   if (!image && view) {
@@ -376,7 +379,7 @@ async function askFree(question: string): Promise<void> {
     role: "user", images: image ? [image] : undefined,
     text: lessonAskRequest(question, les.name, les.flow.page, carriedFor(les.carried, les.flow.page + 1)) + actionHint(),
   }];
-  const text = await request(systemWithMarks(SYSTEM_PROMPT), msgs, body, wrap);
+  const text = await request(systemWithProfile(systemWithMarks(SYSTEM_PROMPT)), msgs, body, wrap);
   if (text === null || L !== les) return;
   const vis = parseLessonReply(text).visible;
   attachMarks(les.path, wrap, body, vis);

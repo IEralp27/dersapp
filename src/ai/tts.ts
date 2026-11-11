@@ -17,6 +17,7 @@ import type { Lang, Segment } from "./tts-text";
 import { getEngine, listEngines, registerEngine } from "./tts-engine";
 import type { Avail, EngineConfig, SpeakEvents, SpeakOpts, Speaker, TtsEngine, VoiceInfo } from "./tts-engine";
 import "./tts-cloud";
+import { learnerTts } from "./learner-ui";
 
 export type { Avail, EngineConfig, SpeakEvents, SpeakOpts, Speaker, TtsEngine, VoiceInfo };
 
@@ -504,6 +505,7 @@ function play(t: TtsTurn, from = 0): void {
     return;
   }
   turn = t;
+  learnerTts(t.el); // yanıt başına bir kez sayılır (learner-ui.ts)
   ranges = computeRanges(t.body, segs);
   idx = Math.max(0, Math.min(from, segs.length - 1));
   errors = 0;

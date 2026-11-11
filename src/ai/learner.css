@@ -1,0 +1,20 @@
+/* Öğrenci profili görünümü */
+.lp { display: flex; flex-direction: column; gap: 12px; }
+.lp-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.lp-head h2 { margin: 0; font-size: 15px; }
+.lp-sec { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--line); padding-top: 10px; }
+.lp-sec h3 { margin: 0; font-size: 13px; }
+.lp-body { display: flex; flex-direction: column; gap: 6px; }
+.lp-notes {
+  width: 100%; box-sizing: border-box; resize: vertical; min-height: 80px;
+  background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 13px;
+}
+.lp-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.lp-path { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11.5px; }
+.lp-path code { word-break: break-all; }
+.lp-note, .lp-stats { font-size: 13px; }
+.lp-stats table { font-size: 12px; }
+.lp-reset { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 10px; }
+.lp-danger { color: #ff8a80; }
+.ai-btn.lp-danger:not(.ghost) { background: #b3261e; color: #fff; }
+.lp-entry { align-self: flex-start; }

@@ -22,6 +22,7 @@ import { QuizStore, newId } from "./quiz-store";
 import type { Attempt, SavedQuiz } from "./quiz-store";
 import "./quiz.css";
 import { notesPlan } from "./notes";
+import { learnerQuizDone, learnerQuizHint } from "./learner-ui";
 
 export interface StudyHost {
   current(): { path: string; name: string; view: PdfView } | null;
@@ -480,7 +481,7 @@ async function makeQuiz(f: Form, pages: number[]): Promise<void> {
     const { images, desc } = await sourceImages(cur.view, pages, region, p, ctrl.signal);
     const ask: ChatMessage = {
       role: "user",
-      text: quizRequest({ count: f.count, difficulty: f.difficulty, kind: f.kind, pages: desc, name: cur.name }),
+      text: quizRequest({ count: f.count, difficulty: f.difficulty, kind: f.kind, pages: desc, name: cur.name }) + learnerQuizHint(),
       images,
     };
     p.set("Yapay zeka soruları yazıyor…", 0.1);
@@ -917,6 +918,7 @@ function finish2(): void {
   const saved = store.get(s.saved.id) ?? s.saved;
   saved.attempts.push(attempt);
   if (!store.put(saved)) host.toast("Sonuç geçmişe kaydedilemedi (depolama dolu).");
+  learnerQuizDone(saved.name, sc, attempt.ms);
   showResult(saved, attempt);
 }
 

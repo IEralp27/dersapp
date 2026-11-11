@@ -8,7 +8,8 @@ import "./ai.css";
 import { initFloat } from "./float";
 import { initTts, ttsAttach } from "./tts";
 import { renderMarkdown } from "./markdown";
-import { initStudy, studyRow } from "./quiz-view";
+import { initStudy, studyRow, dialogOpen } from "./quiz-view";
+import { initLearner, learnerAction, profileEntry, profileView, systemWithProfile } from "./learner-ui";
 import {
   initLesson, lessonChip, lessonCompose, lessonInput, lessonInterrupt, lessonPlaceholder, lessonSync, lessonTakesInput,
 } from "./lesson-ui";
@@ -287,7 +288,7 @@ async function ask(c: Conv, q: AskInput): Promise<void> {
 
   try {
     await streamChat({
-      presetId, config, system: systemWithMarks(SYSTEM_PROMPT), messages, signal: ctrl.signal,
+      presetId, config, system: systemWithProfile(systemWithMarks(SYSTEM_PROMPT)), messages, signal: ctrl.signal,
       onText: (d) => {
         bot.text += d;
         if (!frame) frame = requestAnimationFrame(() => paint(false));
@@ -364,6 +365,7 @@ function runAction(id: ActionId, att: Attachment): void {
   const c = activeConv();
   if (!c) return;
   const cur = host.current()!;
+  learnerAction(id, cur.name, att.page);
   void ask(c, {
     text: `${ACTION_PROMPTS[id]}${id === "quiz" ? "" : actionHint()}\n\n${contextLine(cur.name, att.page)}`,
     label: `${ACTION_LABELS[id]} · s. ${att.page}`,
@@ -407,6 +409,7 @@ function sendTyped(): void {
   const cur = host.current()!;
   input.value = "";
   autosize();
+  learnerAction("free", cur.name, cur.view.page); // yalnızca tür; soru metni kaydedilmez
   void ask(c, {
     text: att ? `${FREE_QUESTION_HINT}\n${q}\n\n${contextLine(cur.name, att.page)}` : q,
     label: q,
@@ -546,6 +549,7 @@ function renderCompose(c: Conv | null): void {
   }
 
   composeEl.append(studyRow(busy || noDoc)); // Test hazırla / Özet PDF'i / Testlerim (quiz-view.ts)
+  composeEl.append(profileEntry(openProfile)); // Profilim (learner-ui.ts)
 
   const bar = el("div", "ai-input");
   input.disabled = noDoc;
@@ -624,6 +628,17 @@ function openSettings(): void {
   composeEl.hidden = true;
   shown = null;
   mainEl.replaceChildren(settingsView());
+}
+
+function openProfile(): void {
+  settingsOpen = true; // ayar ekranı gibi ana alanı devralır; dişli düğmesi geri döner
+  toggleAi(true);
+  composeEl.hidden = true;
+  shown = null;
+  mainEl.replaceChildren(profileView(() => {
+    settingsOpen = false;
+    render();
+  }));
 }
 
 function settingsView(): HTMLElement {
@@ -934,6 +949,10 @@ export function initAi(h: AiHost): void {
     current: () => host.current(), toast: (t, k) => host.toast(t, k), panel, settings: () => settings,
     pending: () => activeConv()?.pending ?? null, openSettings, followUp,
     beforeJob: (what) => lessonInterrupt(what),
+  });
+  initLearner({
+    current: () => host.current(), settings: () => settings, toast: (t, k) => host.toast(t, k),
+    busy: () => dialogOpen() || [...convs.values()].some((c) => !!c.busy),
   });
   initLesson({
     current: () => host.current(), settings: () => settings, toast: (t, k) => host.toast(t, k),
