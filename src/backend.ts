@@ -169,3 +169,21 @@ export async function mcpContext(json: string): Promise<void> {
   if (!inTauri) return;
   await invoke("mcp_context", { json });
 }
+
+// ---------------------------------------------------------------- Öğrenci profili
+// Kullanıcının nasıl çalıştığını anlatan düz Markdown dosyası (veri klasöründe ogrenci.md).
+
+export async function loadProfile(): Promise<string> {
+  if (inTauri) return invoke<string>("load_profile");
+  return localStorage.getItem("dersapp:profile") ?? "";
+}
+
+export async function saveProfile(text: string): Promise<void> {
+  if (inTauri) return invoke("save_profile", { text });
+  localStorage.setItem("dersapp:profile", text);
+}
+
+/** Profil dosyasının diskteki yolu (kullanıcıya göstermek için). Tarayıcıda boş. */
+export async function profilePath(): Promise<string> {
+  return inTauri ? invoke<string>("profile_path") : "";
+}

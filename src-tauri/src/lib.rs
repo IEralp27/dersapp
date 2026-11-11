@@ -45,6 +45,22 @@ async fn save_notes(app: AppHandle, path: String, json: String) -> Result<(), St
     store::write_atomic(&store::notes_file(&data_dir(&app)?, &path), &json)
 }
 
+/// Öğrenci profili: kullanıcının açıp okuyabileceği düz bir Markdown dosyası (ogrenci.md).
+#[tauri::command]
+async fn load_profile(app: AppHandle) -> Result<String, String> {
+    store::read_text(&data_dir(&app)?.join("ogrenci.md"))
+}
+
+#[tauri::command]
+async fn save_profile(app: AppHandle, text: String) -> Result<(), String> {
+    store::write_atomic(&data_dir(&app)?.join("ogrenci.md"), &text)
+}
+
+#[tauri::command]
+async fn profile_path(app: AppHandle) -> Result<String, String> {
+    Ok(data_dir(&app)?.join("ogrenci.md").to_string_lossy().into_owned())
+}
+
 #[tauri::command]
 async fn mcp_take_requests(app: AppHandle) -> Result<Vec<String>, String> {
     Ok(store::mcp_take_requests(&data_dir(&app)?))
@@ -66,7 +82,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             read_pdf, write_pdf, list_dir, load_state, save_state, load_notes, save_notes,
-            mcp_take_requests, mcp_respond, mcp_context
+            mcp_take_requests, mcp_respond, mcp_context,
+            load_profile, save_profile, profile_path
         ])
         .run(tauri::generate_context!())
         .expect("uygulama başlatılamadı");
