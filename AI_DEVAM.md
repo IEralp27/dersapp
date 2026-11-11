@@ -34,6 +34,8 @@ Kullanıcı hata çıktısı atarsa önce onu düzelt.
 
 ## Bilinen eksikler / sıradaki fikirler
 - **Linux sesi:** WebKitGTK'da sistem sesi güvenilmez. Plan: Piper (çevrimdışı, Türkçe sesi var) Rust tarafında motor olarak; altyapı hazır (`src/ai/tts-audio.ts`, `tts-engine.ts`, yeni motor = tek dosya). Model ~60 MB: paketle mi, ilk kullanımda mı indirilsin, kullanıcıya sor.
+- **Yeni ses motorları (kullanıcı istedi):** Google Cloud TTS, Azure (Microsoft) ve ElevenLabs için birer motor dosyası (`src/ai/tts-<ad>.ts`, `registerEngine` + `BytesSpeaker`; adımlar `tts.ts` başındaki yorumda). Her birinin kendi anahtar alanı ayarlarda olsun. Şu an ayarlardan yalnızca OpenAI uyumlu servisler ("Özel" sağlayıcı) eklenebiliyor. Güncel API biçimlerini resmi dokümandan doğrula.
+- **Proje GitHub'da:** https://github.com/IEralp27/dersapp (dal `main`). Değişikliklerden sonra commit + push.
 - **OpenAI ses modelleri 6 Ocak 2027'de kapanıyor:** bulut ses motorunu güncellemek gerekecek.
 - **Hesap makinesi:** DEG kipinde türev/integral içi trigonometri dereceyle hesaplanıyor (RAD'a çevrilmeli).
 - **Ders notu PDF'i:** içindekilerde sayfa numarası yok. Üretilen PDF'lerde metin resim (seçilemiyor).
