@@ -5,9 +5,10 @@ import * as pdfjs from "pdfjs-dist";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import * as backend from "./backend";
-import { Notes, constrain, drawShape, hitShape } from "./draw";
+import { Notes, TEXT_FONT, TEXT_LINE, constrain, drawShape, hitShape, makeText, measureText, replaceShape, textSize } from "./draw";
 import type { DrawTool, Shape, Tool } from "./draw";
 import { Selection } from "./select";
+import { AiLayer } from "./ai-layer";
 import "./viewer.css";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
@@ -71,6 +72,24 @@ interface Stroke {
   y0: number;
 }
 
+/** Ekran görüntüsünün sayfadaki yeri (sayfa birimi): [x, y, genişlik, yükseklik] */
+export type PageRect = [number, number, number, number];
+
+/** Metin düzenleme kutusu */
+interface TextEdit {
+  slot: Slot;
+  /** Düzenlenen mevcut metin (yeni metinde null) */
+  orig: Shape | null;
+  ta: HTMLTextAreaElement;
+  x: number;
+  y: number;
+  color: string;
+  size: number;
+}
+
+/** Seç aracında çift tıklama algılama süresi */
+const DOUBLE_MS = 450;
+
 export class PdfError extends Error {}
 
 export class PageView {
@@ -84,6 +103,11 @@ export class PageView {
   private scrollFrame = 0;
   private disposed = false;
   readonly selection: Selection;
+  /** Yapay zeka işaretleri katmanı (kullanıcının çizimlerinden ayrı) */
+  readonly ai: AiLayer;
+  private edit: TextEdit | null = null;
+  /** Seç aracında son tıklanan metin (çift tıklamayla düzenleme için) */
+  private lastTap: { shape: Shape; at: number } | null = null;
   /** Gizlenmeden önceki konum (yeniden gösterilince dönülür) */
   lastPos: ViewPos | null = null;
 
@@ -103,6 +127,14 @@ export class PageView {
     this.el.tabIndex = 0;
     this.el.classList.toggle("board", !doc);
     this.selection = new Selection(notes);
+    this.ai = new AiLayer({
+      pageEl: (n) => this.slots[n - 1]?.el ?? null,
+      pageSize: (n) => {
+        const slot = this.slots[n - 1];
+        return slot ? [slot.w, slot.h] : null;
+      },
+      scrollTo: (n, box) => this.scrollToBox(n, box),
+    });
     this.pagesEl.className = "pages";
     this.el.append(this.pagesEl);
 
@@ -137,8 +169,8 @@ export class PageView {
 
   /** Çizimler değişince çağrılır (kaydetmek için). */
   onNotesChanged: () => void = () => {};
-  /** Ekran görüntüsü aracıyla bir bölge seçilince çağrılır (PDF + çizimler birlikte). */
-  onSnip: (image: HTMLCanvasElement, page: number) => void = () => {};
+  /** Ekran görüntüsü aracıyla bir bölge seçilince çağrılır (PDF + çizimler birlikte); rect: bölgenin sayfadaki yeri. */
+  onSnip: (image: HTMLCanvasElement, page: number, rect: PageRect) => void = () => {};
 
   static async open(data: Uint8Array, tools: ToolState, notesJson: string | null): Promise<PageView> {
     let doc: PDFDocumentProxy;
@@ -199,6 +231,7 @@ export class PageView {
   private sizeSlot(slot: Slot): void {
     slot.el.style.width = Math.round(slot.w * this.scale) + "px";
     slot.el.style.height = Math.round(slot.h * this.scale) + "px";
+    if (this.edit?.slot === slot) this.layoutEdit();
   }
 
   private applyFit(): void {
@@ -333,6 +366,7 @@ export class PageView {
         slot.w = base.width;
         slot.h = base.height;
         this.sizeSlot(slot);
+        this.ai.resize(slot.num);
       }
       const viewport = page.getViewport({ scale: scale * this.pixelRatio(slot) });
       const canvas = document.createElement("canvas");
@@ -414,8 +448,9 @@ export class PageView {
     ctx.clearRect(0, 0, w, h);
     ctx.setTransform(k, 0, 0, k, 0, 0);
     // Fosforlular altta kalsın ki kalem yazısını örtmesin
+    const skip = this.edit?.slot === slot ? this.edit.orig : null; // düzenlenen metin kutuda gösteriliyor
     for (const s of shapes) if (s.t === "hl") drawShape(ctx, s);
-    for (const s of shapes) if (s.t !== "hl") drawShape(ctx, s);
+    for (const s of shapes) if (s.t !== "hl" && s !== skip) drawShape(ctx, s);
     if (live) drawShape(ctx, live);
     if (this.selection.page === slot.num) this.selection.draw(ctx, this.scale);
   }
@@ -428,12 +463,26 @@ export class PageView {
   }
 
   private onDown(e: PointerEvent): void {
+    if (this.edit) {
+      if (e.target === this.edit.ta) return; // kutunun içinde imleç konumlandırma
+      // Dışarı tıklama yazmayı bitirir (bu tıklama yeni bir şey başlatmaz)
+      if (e.button === 0) e.preventDefault();
+      this.finishEdit(true);
+      return;
+    }
     const tool = this.tools.tool;
     if (tool === "none" || e.button !== 0 || this.stroke) return;
     const pageEl = (e.target as HTMLElement).closest<HTMLElement>(".page");
     const slot = pageEl && this.slots[Number(pageEl.dataset.num) - 1];
     if (!slot) return;
     e.preventDefault();
+    if (tool === "text") {
+      const [x, y] = this.toPage(slot, e);
+      const hit = Selection.pick(this.notes.get(slot.num).filter((s) => s.t === "text"), x, y, 3 / this.scale);
+      // Mevcut metne tıklayınca düzenle; boş yere tıklayınca yeni metin
+      this.startEdit(slot, hit ? hit.p[0] : x, hit ? hit.p[1] : y, hit);
+      return;
+    }
     this.el.focus({ preventScroll: true }); // seçim kısayolları için
     this.pagesEl.setPointerCapture(e.pointerId);
     const [x, y] = this.toPage(slot, e);
@@ -449,7 +498,7 @@ export class PageView {
       this.eraseAt(slot, x, y);
       return;
     }
-    const shape: Shape = { t: tool, c: this.tools.color, w: this.tools.size, p: [x, y, x, y] };
+    const shape: Shape = { t: tool as DrawTool, c: this.tools.color, w: this.tools.size, p: [x, y, x, y] };
     this.stroke = { ...base, shape };
     this.queueInk(slot);
   }
@@ -564,7 +613,7 @@ export class PageView {
       const lk = layer.width / slot.w;
       ctx.drawImage(layer, left * lk, top * lk, w * lk, h * lk, 0, 0, out.width, out.height);
     }
-    this.onSnip(out, slot.num);
+    this.onSnip(out, slot.num, [left, top, w, h]);
   }
 
   private eraseAt(slot: Slot, x: number, y: number): void {
@@ -582,6 +631,15 @@ export class PageView {
     const shapes = this.notes.get(slot.num);
     const r = 6 / this.scale;
     const hit = Selection.pick(shapes, x, y, r);
+    // Metne çift tıklama: düzenle
+    const now = performance.now();
+    if (!shift && hit?.t === "text" && this.lastTap?.shape === hit && now - this.lastTap.at < DOUBLE_MS) {
+      this.lastTap = null;
+      this.redrawSelection(() => sel.clear());
+      this.startEdit(slot, hit.p[0], hit.p[1], hit);
+      return;
+    }
+    this.lastTap = hit ? { shape: hit, at: now } : null;
     if (shift && hit) {
       // Shift+tık: seçime ekle / çıkar
       this.redrawSelection(() => sel.add(slot.num, [hit], true));
@@ -633,12 +691,13 @@ export class PageView {
 
   /** Araç değişince çağrılır: seç/taşı dışındaki araçlarda seçim bırakılır. */
   syncTool(): void {
+    if (this.edit && this.tools.tool !== "text" && this.tools.tool !== "select") this.finishEdit(true);
     if (this.tools.tool !== "select" && this.selection.size) this.redrawSelection(() => this.selection.clear());
     if (this.tools.tool !== "select") this.pagesEl.style.cursor = "";
   }
 
   private onKey(e: KeyboardEvent): void {
-    if (this.tools.tool !== "select" || this.stroke || e.altKey) return;
+    if (this.tools.tool !== "select" || this.stroke || e.altKey || this.edit) return;
     const sel = this.selection;
     const ctrl = e.ctrlKey || e.metaKey;
     const key = e.key.toLowerCase();
@@ -660,6 +719,132 @@ export class PageView {
     e.preventDefault();
     e.stopPropagation(); // uygulama kısayolları (ör. Esc = Fare aracı) çalışmasın
     this.redrawSelection(run);
+  }
+
+  // ------------------------------------------------------------ Metin
+
+  /** Sayfada yerinde yazma kutusu açar (orig: düzenlenecek mevcut metin). */
+  private startEdit(slot: Slot, x: number, y: number, orig: Shape | null): void {
+    if (this.edit) this.finishEdit(true);
+    const ta = document.createElement("textarea");
+    ta.className = "text-edit";
+    ta.spellcheck = false;
+    ta.wrap = "off";
+    ta.value = orig?.s ?? "";
+    ta.setAttribute("aria-label", "Metin");
+    const color = orig?.c ?? this.tools.color;
+    const size = orig?.w ?? textSize(this.tools.size);
+    this.edit = { slot, orig, ta, x, y, color, size };
+    ta.addEventListener("input", () => this.layoutEdit());
+    ta.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        this.finishEdit(false);
+      } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.finishEdit(true);
+      }
+    });
+    ta.addEventListener("blur", () => {
+      if (this.edit?.ta === ta) this.finishEdit(true);
+    });
+    slot.el.append(ta);
+    this.layoutEdit();
+    if (orig) this.queueInk(slot); // eski hali kutunun altında görünmesin
+    ta.focus({ preventScroll: true });
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+  }
+
+  /** Yazma kutusunu metnin çizileceği yere ve boyuta oturtur. */
+  private layoutEdit(): void {
+    const ed = this.edit;
+    if (!ed) return;
+    const { slot, ta } = ed;
+    const k = this.scale;
+    const [w, h] = measureText(ta.value || " ", ed.size);
+    ta.style.left = (ed.x / slot.w) * 100 + "%";
+    ta.style.top = (ed.y / slot.h) * 100 + "%";
+    ta.style.font = `${ed.size * k}px/${TEXT_LINE} ${TEXT_FONT}`;
+    ta.style.color = ed.color;
+    ta.style.width = Math.ceil(w * k + ed.size * k * 0.6 + 4) + "px";
+    ta.style.height = Math.ceil(h * k) + "px";
+  }
+
+  /** Yazmayı bitirir: commit=true ise metin kaydedilir (boşsa düzenlenen metin silinir). */
+  private finishEdit(commit: boolean): void {
+    const ed = this.edit;
+    if (!ed) return;
+    this.edit = null;
+    const { slot, orig, ta } = ed;
+    const text = ta.value.replace(/\s+$/, "");
+    const hadFocus = document.activeElement === ta;
+    ta.remove();
+    if (hadFocus) this.el.focus({ preventScroll: true });
+    if (!commit || (text === (orig?.s ?? "") && orig)) {
+      this.queueInk(slot);
+      return;
+    }
+    const list = this.notes.get(slot.num);
+    if (!text) {
+      if (orig) this.notes.commit(slot.num, list.filter((s) => s !== orig));
+      else this.queueInk(slot);
+      return;
+    }
+    const shape = makeText(text, ed.x, ed.y, ed.color, ed.size);
+    if (orig) this.notes.commit(slot.num, list.map((s) => (s === orig ? replaceShape(orig, shape) : s)));
+    else this.notes.add(slot.num, shape);
+  }
+
+  /** Şu an yerinde metin yazılıyor mu? */
+  get editing(): boolean {
+    return !!this.edit;
+  }
+
+  // ------------------------------------------------------------ Dış erişim
+
+  /** Şekilleri sayfaya ekler (tek geri-al adımı). */
+  addShapes(page: number, shapes: Shape[]): void {
+    if (!this.slots[page - 1]) throw new Error("Sayfa bulunamadı: " + page);
+    if (shapes.length) this.notes.commit(page, [...this.notes.get(page), ...shapes]);
+  }
+
+  /** Ekrandaki bir noktanın altındaki sayfa ve sayfa birimindeki konumu */
+  pageAt(clientX: number, clientY: number): { page: number; x: number; y: number } | null {
+    for (const slot of this.slots) {
+      const r = slot.el.getBoundingClientRect();
+      if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) {
+        return { page: slot.num, x: ((clientX - r.left) / r.width) * slot.w, y: ((clientY - r.top) / r.height) * slot.h };
+      }
+    }
+    return null;
+  }
+
+  /** Sayfanın kesin boyutu (sayfa birimi). PDF sayfası henüz çizilmediyse PDF'ten okunur. */
+  async pageSize(num: number): Promise<[number, number]> {
+    const slot = this.slots[num - 1];
+    if (!slot) throw new Error("Sayfa bulunamadı: " + num);
+    if (!this.doc) return [slot.w, slot.h];
+    const v = (await this.doc.getPage(num)).getViewport({ scale: 1 });
+    return [v.width, v.height];
+  }
+
+  /** Sayfadaki bir kutu görünür alanda değilse ortalayarak oraya kaydırır. */
+  scrollToBox(num: number, box: [number, number, number, number]): void {
+    const slot = this.slots[num - 1];
+    if (!slot || this.el.hidden) return;
+    const k = slot.el.offsetHeight / slot.h;
+    const top = slot.el.offsetTop + box[1] * k, bottom = slot.el.offsetTop + box[3] * k;
+    const left = slot.el.offsetLeft + box[0] * k, right = slot.el.offsetLeft + box[2] * k;
+    const v = this.el;
+    const margin = 24;
+    if (top < v.scrollTop + margin || bottom > v.scrollTop + v.clientHeight - margin) {
+      v.scrollTo({ top: (top + bottom) / 2 - v.clientHeight / 2, behavior: "smooth" });
+    }
+    if (left < v.scrollLeft || right > v.scrollLeft + v.clientWidth) {
+      v.scrollTo({ left: (left + right) / 2 - v.clientWidth / 2, behavior: "smooth" });
+    }
   }
 
   /** Bir sayfanın tamamını (çizimlerle) resim olarak verir; uzun kenarı en fazla maxSide piksel. */
@@ -731,6 +916,7 @@ export class PageView {
 
   dispose(): void {
     this.disposed = true;
+    this.edit = null;
     this.io.disconnect();
     this.ro.disconnect();
     for (const slot of this.slots) this.release(slot);
@@ -753,7 +939,23 @@ export class PdfView {
 
   onInfo: () => void = () => {};
   onNotesChanged: () => void = () => {};
-  onSnip: (image: HTMLCanvasElement, page: number) => void = () => {};
+  /** extra: bölgenin sayfadaki yeri ve beyaz tahtada olup olmadığı ("dersapp:snip" ayrıntısına eklenir) */
+  onSnip: (image: HTMLCanvasElement, page: number, extra: { rect: PageRect; board: boolean }) => void = () => {};
+
+  /** Açık sekme görünümleri (metin yerleştirme gibi belge dışı olaylar için) */
+  private static open_ = new Set<PdfView>();
+
+  /** Ekranda görünen sekme (yoksa null) */
+  static visible(): PdfView | null {
+    for (const v of PdfView.open_) if (v.el.isConnected && !v.el.hidden) return v;
+    return null;
+  }
+
+  /** Yoluna göre açık sekme görünümü */
+  static byPath(path: string): PdfView | null {
+    for (const v of PdfView.open_) if (v.path === path) return v;
+    return null;
+  }
 
   private constructor(
     private readonly path: string,
@@ -768,6 +970,7 @@ export class PdfView {
     this.cur = (pdf ?? board)!;
     for (const v of [pdf, board]) if (v) this.adopt(v);
     this.board = board;
+    PdfView.open_.add(this);
   }
 
   static async open(path: string, data: Uint8Array, tools: ToolState, notesJson: string | null): Promise<PdfView> {
@@ -787,7 +990,7 @@ export class PdfView {
       this.dirty.add(v);
       this.onNotesChanged();
     };
-    v.onSnip = (image, page) => this.onSnip(image, page);
+    v.onSnip = (image, page, rect) => this.onSnip(image, page, { rect, board: v === this.board });
     v.el.hidden = v !== this.cur;
     this.el.append(v.el);
   }
@@ -816,6 +1019,15 @@ export class PdfView {
   capturePage(num: number, maxSide?: number): Promise<HTMLCanvasElement> { return this.cur.capturePage(num, maxSide); }
   /** Sekmenin asıl belgesi: PDF (tahta gösterilirken de), bağımsız tahta sekmesinde tahta. */
   get docView(): PageView { return (this.pdf ?? this.board)!; }
+  /** Ekranda gösterilen görünüm (PDF ya da tahta) */
+  get current(): PageView { return this.cur; }
+  /** Beyaz tahta (board=true; henüz açılmadıysa null) ya da asıl belge */
+  layer(board: boolean): PageView | null { return board ? this.board : this.docView; }
+  /** Gösterilen görünümün sayfasına şekiller ekler (tek geri-al adımı). */
+  addShapes(page: number, shapes: Shape[]): void { this.cur.addShapes(page, shapes); }
+  pageSize(num: number): Promise<[number, number]> { return this.cur.pageSize(num); }
+  /** Yeni metnin rengi ve boyutu (renk/kalınlık denetimlerinden) */
+  textStyle(): { color: string; size: number } { return { color: this.tools.color, size: textSize(this.tools.size) }; }
 
   /** Kaydedilen konum her zaman PDF'inki (tahtadayken de PDF'te kalınan yer korunur). */
   getPos(): ViewPos {
@@ -871,6 +1083,7 @@ export class PdfView {
 
   dispose(): void {
     this.disposed = true;
+    PdfView.open_.delete(this);
     this.pdf?.dispose();
     this.board?.dispose();
     this.el.remove();

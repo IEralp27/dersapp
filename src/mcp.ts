@@ -16,6 +16,8 @@ import { QuizStore, newId } from "./ai/quiz-store";
 import type { Attempt, SavedQuiz } from "./ai/quiz-store";
 import { openExternalQuiz } from "./ai/quiz-view";
 import { addExam, examSnapshot } from "./exams";
+import { validateMarks } from "./ai/marks";
+import { showExternalMarks } from "./ai/marks-ui";
 import type { ExamInfo } from "./exams";
 
 // ------------------------------------------------------------ Türler
@@ -274,6 +276,35 @@ const tools: Record<string, Tool> = {
     await nextFrame();
     await nextFrame();
     return [text(`${q(docLabel(doc))} etkin sekme yapıldı ve ${n}. sayfaya gidildi (belge ${view.docView.pageCount} sayfa).`)];
+  },
+
+  async annotate_page(args) {
+    const doc = resolveDoc(strArg(args, "document"));
+    if (!Array.isArray(args.marks) || !args.marks.length) {
+      throw new ToolError('"marks" boş olmayan bir dizi olmalı. Her öğe: { type: "box"|"highlight"|"underline"|"arrow"|"label", '
+        + 'box: [x0,y0,x1,y1] | from/to: [x,y] | at: [x,y], n?: 1-20, note?: kısa metin }; koordinatlar sayfanın tamamına göre 0-1000.');
+    }
+    const { marks, problems } = validateMarks(args.marks);
+    if (!marks.length) throw new ToolError(`Hiçbir işaret geçerli değil, sayfaya bir şey çizilmedi:\n${problems.map((p) => "- " + p).join("\n")}`);
+    host.activate(doc.path);
+    const view = await viewOf(doc);
+    const pv = view.docView;
+    const n = intArg(args, "page") ?? pv.page;
+    checkPage(n, pv.pageCount, doc);
+    if (view.onBoard && !view.boardOnly) {
+      await view.toggleBoard(); // işaretler PDF sayfasında; PDF'e dön
+      host.refresh();
+    }
+    const [w, h] = await pv.pageSize(n);
+    await nextFrame();
+    showExternalMarks(doc.path, doc.name, { page: n, rect: [0, 0, w, h], board: view.boardOnly }, marks);
+    host.toast(`Bağlı yapay zeka ${n}. sayfada ${marks.length} yeri işaretledi.`, "info");
+    const steps = marks.filter((m) => m.n).map((m) => m.n);
+    return [text(`${q(docLabel(doc))} ${n}. sayfasına ${marks.length} işaret çizildi ve öğrenciye gösterildi`
+      + (steps.length ? ` (numaralı adımlar: ${steps.join(", ")})` : "") + ". "
+      + "İşaretler öğrencinin kendi çizimlerinden ayrı bir katmanda; öğrenci gizleyebilir, temizleyebilir ya da kalıcı yapabilir. "
+      + "Anlatımında aynı numaraları (1, 2, 3 ...) kullanırsan öğrenci adımları sayfada takip eder."
+      + (problems.length ? `\n\nAtlanan işaretler (${problems.length}):\n${problems.map((p) => "- " + p).join("\n")}` : ""))];
   },
 
   async show_test(args) {

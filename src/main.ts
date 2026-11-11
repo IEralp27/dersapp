@@ -8,6 +8,7 @@ import type { ToolState, ViewPos } from "./viewer";
 import { initCalculator } from "./calc";
 import { initExams } from "./exams";
 import { initMcp } from "./mcp";
+import { initTextPlace } from "./text-place";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -167,7 +168,7 @@ function load(tab: Tab): Promise<void> {
         saveNotesSoon(tab);
         renderToolState();
       };
-      view.onSnip = (image, page) => onSnip(tab, image, page);
+      view.onSnip = (image, page, extra) => onSnip(tab, image, page, extra);
       view.el.hidden = tab !== active;
       $("stage").append(view.el);
       if (tab === active) showView(tab);
@@ -409,6 +410,7 @@ const TOOLS: { id: Tool; label: string; key: string; icon: string }[] = [
   { id: "arrow", label: "Ok", key: "A", icon: "M5 19L19 5M11 5h8v8" },
   { id: "rect", label: "Dikdörtgen", key: "R", icon: "M4 6h16v12H4z" },
   { id: "oval", label: "Elips", key: "O", icon: "M12 5c5 0 9 3 9 7s-4 7-9 7-9-3-9-7 4-7 9-7z" },
+  { id: "text", label: "Metin", key: "M", icon: "M5 6V4h14v2M12 4v16M9 20h6" },
   { id: "eraser", label: "Silgi", key: "E", icon: "M9 20h11M4 15l9-10 6 5-8 10H8z" },
   { id: "snip", label: "Ekran görüntüsü", key: "C", icon: "M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4M9 9h6v6H9z" },
 ];
@@ -551,9 +553,9 @@ async function toggleBoard(): Promise<void> {
 // ------------------------------------------------------------ Ekran görüntüsü
 
 /** Seçilen bölgeyi panoya kopyalar; başka bölümler "dersapp:snip" olayını dinleyebilir. */
-function onSnip(tab: Tab, image: HTMLCanvasElement, page: number): void {
+function onSnip(tab: Tab, image: HTMLCanvasElement, page: number, extra: object): void {
   const event = new CustomEvent("dersapp:snip", {
-    detail: { image, page, path: tab.path, name: tab.name },
+    detail: { image, page, path: tab.path, name: tab.name, ...extra }, // extra: rect (sayfa birimi), board
     cancelable: true,
   });
   if (!document.dispatchEvent(event)) return; // başka bir bölüm üstlendi
@@ -615,6 +617,7 @@ async function init(): Promise<void> {
   buildTools();
   calc = initCalculator();
   initExams();
+  initTextPlace();
   initAi({ current: () => (active?.view ? { path: active.path, name: active.name, view: active.view } : null), toast });
   initMcp({
     docs: () => tabs.map((t) => ({ path: t.path, name: t.name, view: t.view, active: t === active, failed: t.failed })),
