@@ -28,7 +28,7 @@ cargo build --release
 <depo>\mcp-server\target\release\dersapp-mcp.exe
 ```
 
-Aşağıdaki örneklerde yol olarak `C:\Projeler\ders-app\mcp-server\target\release\dersapp-mcp.exe`
+Aşağıdaki örneklerde yol olarak `C:\Users\Eralp\Desktop\dev_app_learn\dersapp\mcp-server\target\release\dersapp-mcp.exe`
 kullanıldı; **kendi yolunla değiştir.** Tam yolu öğrenmek için:
 
 ```powershell
@@ -53,7 +53,7 @@ klasörünü gösterir (varsayılan `%APPDATA%\com.eralp.dersapp`).
 
 ### JSON'da ters eğik çizgi
 
-JSON dosyalarında `\` iki kez yazılır: `C:\\Projeler\\ders-app\\...`. Tek `\` yazarsan
+JSON dosyalarında `\` iki kez yazılır: `C:\\Users\\Eralp\\Desktop\\dev_app_learn\\dersapp\\...`. Tek `\` yazarsan
 dosya bozulur ve sunucu görünmez. (Komut satırında ve TOML'daki tek tırnaklı
 dizelerde tek `\` yeterli.)
 
@@ -68,7 +68,7 @@ dizelerde tek `\` yeterli.)
 {
   "mcpServers": {
     "dersapp": {
-      "command": "C:\\Projeler\\ders-app\\mcp-server\\target\\release\\dersapp-mcp.exe",
+      "command": "C:\\Users\\Eralp\\Desktop\\dev_app_learn\\dersapp\\mcp-server\\target\\release\\dersapp-mcp.exe",
       "args": []
     }
   }
@@ -87,7 +87,7 @@ Kaynak: <https://modelcontextprotocol.io/docs/develop/connect-local-servers>
 PowerShell'de (tüm projelerde kullanmak için `--scope user`):
 
 ```powershell
-claude mcp add --scope user --transport stdio dersapp -- "C:\Projeler\ders-app\mcp-server\target\release\dersapp-mcp.exe"
+claude mcp add --scope user --transport stdio dersapp -- "C:\Users\Eralp\Desktop\dev_app_learn\dersapp\mcp-server\target\release\dersapp-mcp.exe"
 ```
 
 `--` işaretinden sonrası olduğu gibi sunucuya verilir. Kontrol: `claude mcp list`
@@ -106,7 +106,7 @@ Kaynak: <https://code.claude.com/docs/en/mcp>
 {
   "mcpServers": {
     "dersapp": {
-      "command": "C:\\Projeler\\ders-app\\mcp-server\\target\\release\\dersapp-mcp.exe",
+      "command": "C:\\Users\\Eralp\\Desktop\\dev_app_learn\\dersapp\\mcp-server\\target\\release\\dersapp-mcp.exe",
       "args": [],
       "timeout": 120000
     }
@@ -114,7 +114,7 @@ Kaynak: <https://code.claude.com/docs/en/mcp>
 }
 ```
 
-ya da komutla: `gemini mcp add dersapp "C:\Projeler\ders-app\mcp-server\target\release\dersapp-mcp.exe"`.
+ya da komutla: `gemini mcp add dersapp "C:\Users\Eralp\Desktop\dev_app_learn\dersapp\mcp-server\target\release\dersapp-mcp.exe"`.
 Kontrol: Gemini CLI içinde `/mcp` → `dersapp` için `CONNECTED`. Gemini CLI araçların
 döndürdüğü görüntüleri de modele iletir (`read_page` ile sayfa görüntüsü çalışır).
 
@@ -125,7 +125,7 @@ Kaynak: <https://geminicli.com/docs/tools/mcp-server>
 Komutla:
 
 ```powershell
-codex mcp add dersapp -- "C:\Projeler\ders-app\mcp-server\target\release\dersapp-mcp.exe"
+codex mcp add dersapp -- "C:\Users\Eralp\Desktop\dev_app_learn\dersapp\mcp-server\target\release\dersapp-mcp.exe"
 ```
 
 ya da `%USERPROFILE%\.codex\config.toml` dosyasına (tek tırnaklı TOML dizesinde `\`
@@ -133,7 +133,7 @@ kaçışlanmaz):
 
 ```toml
 [mcp_servers.dersapp]
-command = 'C:\Projeler\ders-app\mcp-server\target\release\dersapp-mcp.exe'
+command = 'C:\Users\Eralp\Desktop\dev_app_learn\dersapp\mcp-server\target\release\dersapp-mcp.exe'
 args = []
 tool_timeout_sec = 120
 ```
