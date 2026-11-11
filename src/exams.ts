@@ -4,7 +4,7 @@ import "./exams.css";
 
 const KEY = "dersapp:exams";
 
-interface Exam {
+export interface Exam {
   id: string;
   course: string;
   date: string; // YYYY-MM-DD (yerel gün)
@@ -435,6 +435,64 @@ function submitForm(): void {
   persist();
   hideForm();
   renderAll();
+}
+
+// ------------------------------------------------------------ Dışarıdan erişim (MCP köprüsü)
+
+export interface ExamInfo extends Exam {
+  /** Bugünden kaç gün sonra (negatif: geçmiş) */
+  daysLeft: number;
+  /** "12 Kasım Perşembe" gibi */
+  dateLabel: string;
+}
+
+const info = (e: Exam): ExamInfo => ({ ...e, daysLeft: daysLeft(e), dateLabel: dateLabel(e.date) });
+
+/** Yaklaşan sınavlar (yakından uzağa) ve geçmiş sınavlar (yeniden eskiye). */
+export function examSnapshot(): { upcoming: ExamInfo[]; past: ExamInfo[] } {
+  return { upcoming: upcoming().map(info), past: past().map(info) };
+}
+
+/**
+ * Sınav ekler (arayüzdeki rozet/kartlar güncellenir). Geçersiz girdide anlaşılır Türkçe mesajla Error atar.
+ * Aynı ders aynı gün ve saatte zaten varsa yeniden eklemez (`added: false`).
+ */
+export function addExam(input: { course?: unknown; date?: unknown; time?: unknown; place?: unknown; note?: unknown }):
+  { exam: ExamInfo; added: boolean } {
+  const text = (v: unknown, field: string): string => {
+    if (v === undefined || v === null) return "";
+    if (typeof v !== "string") throw new Error(`"${field}" metin olmalı.`);
+    return v.trim();
+  };
+  const course = text(input.course, "course");
+  const date = text(input.date, "date");
+  const time = text(input.time, "time");
+  const place = text(input.place, "place");
+  const note = text(input.note, "note");
+  if (!course) throw new Error('Ders adı ("course") gerekli.');
+  if (course.length > 120) throw new Error("Ders adı çok uzun (en çok 120 karakter).");
+  const m = DATE_RE.exec(date);
+  const real = m && (() => {
+    const d = new Date(+m[1], +m[2] - 1, +m[3]);
+    return d.getFullYear() === +m[1] && d.getMonth() === +m[2] - 1 && d.getDate() === +m[3];
+  })();
+  if (!real) throw new Error(`Tarih geçersiz: "${date}". YYYY-AA-GG biçiminde gerçek bir tarih olmalı (ör. 2026-11-24).`);
+  if (time && !TIME_RE.test(time)) throw new Error(`Saat geçersiz: "${time}". 24 saatlik SS:DD biçiminde olmalı (ör. 09:30).`);
+  const dup = exams.find((x) => x.course.toLocaleLowerCase("tr") === course.toLocaleLowerCase("tr")
+    && x.date === date && (x.time ?? "") === time);
+  if (dup) return { exam: info(dup), added: false };
+  const data: Exam = { id: newId(), course, date };
+  if (time) data.time = time;
+  if (place) data.place = place;
+  if (note) data.note = note;
+  exams = [...exams, data];
+  persist();
+  if (saveError) {
+    exams = exams.filter((x) => x !== data);
+    throw new Error("Sınav kaydedilemedi (depolama dolu ya da erişilemiyor).");
+  }
+  if (badge) renderAll();
+  return { exam: info(data), added: true };
 }
 
 // ------------------------------------------------------------ Başlangıç

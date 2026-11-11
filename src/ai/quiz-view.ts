@@ -705,6 +705,17 @@ function startSession(saved: SavedQuiz, ids?: number[]): void {
   }, 1000);
 }
 
+/**
+ * Dışarıdan gelen (ör. MCP ile bağlı yapay zekanın gönderdiği) testi geçmişe kaydeder ve test görünümünü açar.
+ * Kaydedilemezse (depolama dolu) yine de açılır; false döner.
+ */
+export function openExternalQuiz(saved: SavedQuiz): boolean {
+  const ok = store.put(saved);
+  if (!job) closeDialog(); // panelde hazırlanan test varsa yarıda kesme
+  startSession(saved);
+  return ok;
+}
+
 function topBar(title: string, meta: string, right: HTMLElement[], onClose: () => void, closeTitle: string): HTMLElement {
   const bar = el("div", "qz-top");
   const t = el("div", "qz-top-title");

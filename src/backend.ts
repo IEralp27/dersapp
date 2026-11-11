@@ -150,3 +150,22 @@ export async function onFilesDropped(cb: (sources: PdfSource[]) => void): Promis
     if (out.length) cb(out);
   });
 }
+
+// ------------------------------------------------------------ MCP köprüsü (bkz. src/mcp.ts)
+// Tauri dışında kuyruk yoktur: istek gelmez, yanıt/bağlam yazımı işlem yapmaz.
+
+/** Bekleyen MCP isteklerinin JSON metinleri (okunanlar kuyruktan silinir). */
+export async function mcpTakeRequests(): Promise<string[]> {
+  if (!inTauri) return [];
+  return invoke<string[]>("mcp_take_requests");
+}
+
+export async function mcpRespond(id: string, json: string): Promise<void> {
+  if (!inTauri) return;
+  await invoke("mcp_respond", { id, json });
+}
+
+export async function mcpContext(json: string): Promise<void> {
+  if (!inTauri) return;
+  await invoke("mcp_context", { json });
+}
