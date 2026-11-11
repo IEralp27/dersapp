@@ -5,6 +5,7 @@
 // Konuşmalar her PDF sekmesi için ayrı tutulur (yalnızca bellekte).
 import type { PdfView } from "../viewer";
 import "./ai.css";
+import { initFloat } from "./float";
 import { renderMarkdown } from "./markdown";
 import { ACTION_PROMPTS, FREE_QUESTION_HINT, SYSTEM_PROMPT, contextLine } from "./prompts";
 import type { ActionId } from "./prompts";
@@ -79,6 +80,7 @@ let composeEl: HTMLElement;
 let input: HTMLTextAreaElement;
 let sendBtn: HTMLButtonElement;
 let settingsOpen = false;
+let floatCtl: ReturnType<typeof initFloat> | undefined;
 const convs = new Map<string, Conv>();
 let shown: Conv | null = null;
 
@@ -411,6 +413,7 @@ function render(): void {
   toggleBtn.classList.toggle("on", ui.open);
   panel.hidden = !ui.open;
   if (!ui.open) return;
+  floatCtl?.refit();
 
   if (settingsOpen) return; // ayar ekranı kendi içeriğini yönetir
 
@@ -820,6 +823,7 @@ export function initAi(h: AiHost): void {
   head.append(
     title,
     iconBtn("Yeni konuşma", ICONS.plus, newConversation),
+    ...(floatCtl = initFloat(panel, head, document.getElementById("stage")!, () => render())).buttons,
     iconBtn("Ayarlar", ICONS.gear, () => (settingsOpen ? (settingsOpen = false, render()) : openSettings())),
     iconBtn("Paneli kapat (Ctrl+J)", ICONS.close, () => toggleAi(false)),
   );
