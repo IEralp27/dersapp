@@ -7,6 +7,7 @@ import { BOARD_TAB, PdfError, PdfView } from "./viewer";
 import type { ToolState, ViewPos } from "./viewer";
 import { initCalculator } from "./calc";
 import { initExams } from "./exams";
+import { initMcp } from "./mcp";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -594,6 +595,18 @@ async function init(): Promise<void> {
   calc = initCalculator();
   initExams();
   initAi({ current: () => (active?.view ? { path: active.path, name: active.name, view: active.view } : null), toast });
+  initMcp({
+    docs: () => tabs.map((t) => ({ path: t.path, name: t.name, view: t.view, active: t === active, failed: t.failed })),
+    activate: (path) => { const t = tabs.find((x) => x.path === path); if (t) activate(t); },
+    load: async (path) => {
+      const t = tabs.find((x) => x.path === path);
+      if (t) await load(t);
+      if (!t?.view) throw new Error(t ? "PDF yüklenemedi" : "sekme kapatılmış");
+      return t.view;
+    },
+    refresh: () => { renderTabs(); renderToolState(); },
+    toast,
+  });
 
   try {
     const text = await backend.loadState();

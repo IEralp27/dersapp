@@ -686,6 +686,49 @@ export class PageView {
     return canvas;
   }
 
+  /** Bu bir PDF sayfa görünümü mü (beyaz tahta değil)? */
+  get isPdf(): boolean {
+    return !!this.doc;
+  }
+
+  /**
+   * Sayfanın seçilebilir metni (PDF.js metin katmanı). Satırlar korunur, paragraf aralarına boş satır konur.
+   * Metin katmanı yoksa (taranmış sayfa, beyaz tahta) boş metin.
+   */
+  async pageText(num: number): Promise<string> {
+    if (!this.slots[num - 1]) throw new Error("Sayfa bulunamadı: " + num);
+    if (!this.doc) return "";
+    const content = await (await this.doc.getPage(num)).getTextContent();
+    const lines: string[] = [];
+    let line = "";
+    let lastY: number | null = null, lastEnd = 0, lastH = 0, lineGap = 0;
+    for (const item of content.items) {
+      if (!("str" in item)) continue;
+      if (!item.str.trim()) {
+        if (line && item.str) line += " ";
+        continue;
+      }
+      const x = item.transform[4], y = item.transform[5];
+      const h = Math.abs(item.height) || Math.abs(item.transform[3]) || 10;
+      if (lastY !== null && Math.abs(y - lastY) > Math.max(h, lastH) * 0.5) {
+        // Yeni satır; normalden belirgin büyük dikey boşluk paragraf arasıdır
+        lines.push(line.trimEnd());
+        line = "";
+        const gap = Math.abs(lastY - y);
+        if (lineGap && gap > lineGap * 1.6 && gap > h * 1.8) lines.push("");
+        else if (!lineGap || gap < lineGap) lineGap = gap;
+      } else if (line && !/\s$/.test(line) && !/^\s/.test(item.str) && x - lastEnd > h * 0.15) {
+        line += " "; // aynı satırda boşlukla ayrılmış parçalar
+      }
+      line += item.str;
+      lastY = y;
+      lastH = h;
+      lastEnd = x + item.width;
+    }
+    if (line.trim()) lines.push(line.trimEnd());
+    return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
+
   dispose(): void {
     this.disposed = true;
     this.io.disconnect();
@@ -771,6 +814,8 @@ export class PdfView {
   setFit(): void { this.cur.setFit(); }
   goToPage(num: number): void { this.cur.goToPage(num); }
   capturePage(num: number, maxSide?: number): Promise<HTMLCanvasElement> { return this.cur.capturePage(num, maxSide); }
+  /** Sekmenin asıl belgesi: PDF (tahta gösterilirken de), bağımsız tahta sekmesinde tahta. */
+  get docView(): PageView { return (this.pdf ?? this.board)!; }
 
   /** Kaydedilen konum her zaman PDF'inki (tahtadayken de PDF'te kalınan yer korunur). */
   getPos(): ViewPos {
