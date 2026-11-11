@@ -135,6 +135,45 @@ pub fn notes_file(data_dir: &Path, pdf_path: &str) -> PathBuf {
     data_dir.join("notes").join(format!("{h:016x}.json"))
 }
 
+// ---------------------------------------------------------------- MCP köprüsü
+// Ayrı çalışan `dersapp-mcp` sunucusu isteklerini dosya olarak bırakır;
+// uygulama bunları alır, yanıtını dosya olarak yazar (bkz. docs/MCP.md).
+
+fn safe_id(id: &str) -> bool {
+    !id.is_empty() && id.len() <= 80 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+/// Bekleyen istekleri okur ve kuyruktan siler.
+pub fn mcp_take_requests(data_dir: &Path) -> Vec<String> {
+    let dir = data_dir.join("mcp").join("requests");
+    let Ok(rd) = fs::read_dir(&dir) else { return Vec::new() };
+    let mut files: Vec<PathBuf> = rd
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("json"))
+        .collect();
+    files.sort();
+    let mut out = Vec::new();
+    for f in files {
+        if let Ok(text) = fs::read_to_string(&f) {
+            out.push(text);
+        }
+        let _ = fs::remove_file(&f);
+    }
+    out
+}
+
+pub fn mcp_respond(data_dir: &Path, id: &str, json: &str) -> Result<(), String> {
+    if !safe_id(id) {
+        return Err("Geçersiz istek kimliği.".into());
+    }
+    write_atomic(&data_dir.join("mcp").join("responses").join(format!("{id}.json")), json)
+}
+
+pub fn mcp_context(data_dir: &Path, json: &str) -> Result<(), String> {
+    write_atomic(&data_dir.join("mcp").join("context.json"), json)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -178,6 +217,26 @@ mod tests {
         assert!(write_pdf(d.join("a.txt").to_str().unwrap(), b"%PDF-1.7").is_err());
         write_pdf(f.to_str().unwrap(), b"%PDF-1.7 x").unwrap();
         assert_eq!(read_pdf(f.to_str().unwrap()).unwrap(), b"%PDF-1.7 x");
+    }
+
+    #[test]
+    fn mcp_queue_roundtrip() {
+        let d = tmp("mcp");
+        assert!(mcp_take_requests(&d).is_empty());
+        let req = d.join("mcp").join("requests");
+        fs::create_dir_all(&req).unwrap();
+        fs::write(req.join("b.json"), "{\"id\":\"b\"}").unwrap();
+        fs::write(req.join("a.json"), "{\"id\":\"a\"}").unwrap();
+        fs::write(req.join("c.tmp"), "yarim").unwrap();
+        assert_eq!(mcp_take_requests(&d), ["{\"id\":\"a\"}", "{\"id\":\"b\"}"]);
+        assert!(mcp_take_requests(&d).is_empty());
+        assert!(req.join("c.tmp").exists());
+        mcp_respond(&d, "a-1_x", "{\"ok\":true}").unwrap();
+        assert_eq!(read_text(&d.join("mcp").join("responses").join("a-1_x.json")).unwrap(), "{\"ok\":true}");
+        assert!(mcp_respond(&d, "../kotu", "{}").is_err());
+        mcp_context(&d, "{\"updatedAt\":1}").unwrap();
+        mcp_context(&d, "{\"updatedAt\":2}").unwrap();
+        assert_eq!(read_text(&d.join("mcp").join("context.json")).unwrap(), "{\"updatedAt\":2}");
     }
 
     #[test]

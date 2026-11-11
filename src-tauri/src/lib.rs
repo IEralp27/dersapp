@@ -45,12 +45,28 @@ async fn save_notes(app: AppHandle, path: String, json: String) -> Result<(), St
     store::write_atomic(&store::notes_file(&data_dir(&app)?, &path), &json)
 }
 
+#[tauri::command]
+async fn mcp_take_requests(app: AppHandle) -> Result<Vec<String>, String> {
+    Ok(store::mcp_take_requests(&data_dir(&app)?))
+}
+
+#[tauri::command]
+async fn mcp_respond(app: AppHandle, id: String, json: String) -> Result<(), String> {
+    store::mcp_respond(&data_dir(&app)?, &id, &json)
+}
+
+#[tauri::command]
+async fn mcp_context(app: AppHandle, json: String) -> Result<(), String> {
+    store::mcp_context(&data_dir(&app)?, &json)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
-            read_pdf, write_pdf, list_dir, load_state, save_state, load_notes, save_notes
+            read_pdf, write_pdf, list_dir, load_state, save_state, load_notes, save_notes,
+            mcp_take_requests, mcp_respond, mcp_context
         ])
         .run(tauri::generate_context!())
         .expect("uygulama başlatılamadı");
