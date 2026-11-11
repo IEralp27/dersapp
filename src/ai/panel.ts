@@ -321,12 +321,8 @@ async function ask(c: Conv, q: AskInput): Promise<void> {
 
 function addAnswerTools(bot: Turn): void {
   const bar = el("div", "ai-answer-tools");
-<<<<<<< HEAD
   bar.append(iconBtn("Yanıtı kopyala (Markdown)", ICONS.copy, () => void copyText(visibleText(bot.text, false), "Yanıt panoya kopyalandı.")));
-=======
-  bar.append(iconBtn("Yanıtı kopyala (Markdown)", ICONS.copy, () => void copyText(bot.text, "Yanıt panoya kopyalandı.")));
   ttsAttach(bar, bot); // sesli okuma düğmeleri (tts.ts)
->>>>>>> feat-k
   bot.el.append(bar);
 }
 
