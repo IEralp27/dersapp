@@ -302,6 +302,116 @@
         "destructiveHint": false,
         "openWorldHint": false
       }
+    },
+    {
+      "name": "annotate_page",
+      "title": "Sayfayı işaretle",
+      "description": "Öğrencinin DersApp ekranında bir PDF sayfasının üstüne işaret çizer: kutu, fosforlu vurgulama, alt çizgi, ok ve numaralı etiket (1, 2, 3 ...). 'Şurada şunu yapıyoruz' diye anlatırken yeri göstermek için kullan; anlatımında aynı numaraları kullan ki öğrenci adımları sayfada takip etsin. Önce read_page ile sayfanın görüntüsüne bak; koordinatlar o görüntüye (sayfanın tamamına) göre 0-1000 arası: (0,0) sol üst, (1000,1000) sağ alt, x ve y ayrı ölçeklenir. Yalnızca yerinden emin olduğun şeyleri işaretle; en çok ~6 işaret, her cümleye değil. İşaretler öğrencinin kendi çizimlerinden ayrı bir katmanda görünür (öğrenci gizleyebilir, temizleyebilir ya da kalıcı yapabilir); sayfa ekranda değilse oraya kaydırılır. / Draws marks over a PDF page on the student's screen (box, highlight, underline, arrow, numbered label) so you can point at places while explaining. Look at the page with read_page first. Coordinates are 0-1000 relative to the whole page image ((0,0) top-left, (1000,1000) bottom-right, x and y scaled independently). Mark only places you are sure about; at most ~6 marks. Marks appear on a separate AI layer the student can hide, clear or keep.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "type": "string",
+            "description": "Belge kimliği ya da adı (list_documents'tan). Boşsa etkin belge. / Document id or name; defaults to the active one."
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "İşaretlenecek sayfa (1'den başlar). Boşsa öğrencinin bulunduğu sayfa. / Page to annotate, 1-based; defaults to the current page."
+          },
+          "marks": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "description": "Çizilecek işaretler (en çok 8). Koordinatlar sayfanın tamamına göre 0-1000. / Marks to draw (max 8), coordinates 0-1000 relative to the whole page.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "box",
+                    "highlight",
+                    "underline",
+                    "arrow",
+                    "label"
+                  ],
+                  "description": "box: çerçeve; highlight: fosforlu boyama; underline: kutunun alt kenarında çizgi; arrow: from'dan to'ya ok (ucu gösterilen yerde); label: bir noktaya numara/not. / box frame, highlighter fill, underline along the box bottom, arrow from->to (tip at the target), label at a point."
+                },
+                "box": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1000
+                  },
+                  "minItems": 4,
+                  "maxItems": 4,
+                  "description": "box/highlight/underline için [x0, y0, x1, y1] (sol üst ve sağ alt köşe). / [x0, y0, x1, y1] for box, highlight and underline."
+                },
+                "from": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1000
+                  },
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "description": "arrow: okun başladığı nokta [x, y]. / Arrow start [x, y]."
+                },
+                "to": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1000
+                  },
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "description": "arrow: okun ucunun gösterdiği nokta [x, y]. / Arrow tip [x, y]."
+                },
+                "at": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1000
+                  },
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "description": "label: etiketin konumu [x, y]. / Label position [x, y]."
+                },
+                "n": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 20,
+                  "description": "Adım numarası; işaretin yanında rozet olarak görünür. Anlatımında aynı numarayı kullan. / Step number shown as a badge; use the same number in your explanation."
+                },
+                "note": {
+                  "type": "string",
+                  "maxLength": 60,
+                  "description": "İsteğe bağlı kısa not (4-5 kelime), işaretin yanında görünür. / Optional short note (a few words) shown next to the mark."
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "marks"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
     }
   ]
 }
