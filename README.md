@@ -62,7 +62,9 @@ Claude Desktop, Claude Code, Gemini CLI gibi uygulamalar DersApp'e bağlanıp a�
 | S | Seç / Taşı (Delete sil, Ctrl+D çoğalt, Ctrl+A tümünü seç, oklar kaydır) |
 | C | Ekran görüntüsü: bölgeyi çerçevele, yapay zeka paneline gider |
 | T | Beyaz tahta ↔ PDF |
+| M | Metin: sayfaya tıkla ve yaz (çift tıkla düzenle) |
 | Ctrl+K | Hesap makinesi |
+| Alt+S | Son yapay zeka yanıtını sesli oku / durdur |
 | Ctrl+J | Yapay zeka paneli |
 | 1-8 | Renk |
 | Shift (çizerken) | Düz çizgi, kare, daire |
