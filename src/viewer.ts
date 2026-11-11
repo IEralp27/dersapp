@@ -662,6 +662,30 @@ export class PageView {
     this.redrawSelection(run);
   }
 
+  /** Bir sayfanın tamamını (çizimlerle) resim olarak verir; uzun kenarı en fazla maxSide piksel. */
+  async capturePage(num: number, maxSide = 1800): Promise<HTMLCanvasElement> {
+    const slot = this.slots[num - 1];
+    if (!slot) throw new Error("Sayfa bulunamadı: " + num);
+    const page = this.doc ? await this.doc.getPage(num) : null;
+    const base = page ? page.getViewport({ scale: 1 }) : { width: slot.w, height: slot.h };
+    const k = Math.min(4, maxSide / Math.max(base.width, base.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.floor(base.width * k);
+    canvas.height = Math.floor(base.height * k);
+    const ctx = canvas.getContext("2d")!;
+    if (page) {
+      await page.render({ canvas, viewport: page.getViewport({ scale: k }) }).promise;
+    } else {
+      ctx.fillStyle = "#fff"; // beyaz tahta sayfası
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+    const shapes = this.notes.get(num);
+    for (const s of shapes) if (s.t === "hl") drawShape(ctx, s);
+    for (const s of shapes) if (s.t !== "hl") drawShape(ctx, s);
+    return canvas;
+  }
+
   dispose(): void {
     this.disposed = true;
     this.io.disconnect();
@@ -746,6 +770,7 @@ export class PdfView {
   setScale(scale: number): void { this.cur.setScale(scale); }
   setFit(): void { this.cur.setFit(); }
   goToPage(num: number): void { this.cur.goToPage(num); }
+  capturePage(num: number, maxSide?: number): Promise<HTMLCanvasElement> { return this.cur.capturePage(num, maxSide); }
 
   /** Kaydedilen konum her zaman PDF'inki (tahtadayken de PDF'te kalınan yer korunur). */
   getPos(): ViewPos {

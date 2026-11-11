@@ -1,0 +1,351 @@
+/* Yapay zeka paneli. Renkler styles.css başındaki değişkenlerden gelir. */
+
+#ai-panel {
+  --ai-w: 380px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: var(--ai-w);
+  /* Dar pencerede PDF alanı tamamen kaybolmasın (dosyalar paneli 240px + araç şeridi 48px) */
+  max-width: calc(100vw - 560px);
+  min-width: 260px;
+  flex: none;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  user-select: text;
+}
+body.no-sidebar #ai-panel { max-width: calc(100vw - 340px); }
+body.ai-resizing { cursor: col-resize; user-select: none; }
+body.ai-resizing .view { pointer-events: none; }
+
+#btn-ai { margin-left: auto; }
+#doc-controls:not([hidden]) ~ #btn-ai { margin-left: 6px; }
+
+.ai-resize {
+  position: absolute;
+  left: -4px;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  z-index: 2;
+}
+.ai-resize:hover, body.ai-resizing .ai-resize { background: linear-gradient(90deg, #0000 3px, var(--accent) 3px 5px, #0000 5px); }
+
+#ai-panel svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ---------------------------------------------------------------- Başlık */
+.ai-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 40px;
+  padding: 0 4px 0 12px;
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+.ai-title { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.ai-title b { font-weight: 600; flex: none; }
+.ai-model {
+  color: var(--dim);
+  font-size: 11px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ai-head button.icon { width: 30px; height: 30px; }
+
+/* ---------------------------------------------------------------- Konuşma */
+.ai-main {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 12px 4px;
+  scrollbar-width: thin;
+}
+.ai-thread { display: flex; flex-direction: column; gap: 12px; }
+
+.ai-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 36px 16px;
+  color: var(--dim);
+  text-align: center;
+  line-height: 1.55;
+}
+.ai-empty svg { width: 34px !important; height: 34px !important; color: var(--accent); }
+.ai-empty p { margin: 0; max-width: 300px; }
+
+.ai-turn { min-width: 0; }
+.ai-user {
+  align-self: flex-end;
+  max-width: 92%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+.ai-user-text {
+  padding: 7px 11px;
+  border-radius: 12px 12px 4px 12px;
+  background: var(--raised);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+.ai-thumb {
+  max-width: 100%;
+  max-height: 140px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: #fff;
+  cursor: copy;
+}
+
+.ai-assistant { position: relative; }
+.ai-note { color: var(--dim); font-size: 12px; font-style: italic; margin-top: 4px; }
+.ai-answer-tools { display: flex; justify-content: flex-start; margin-top: 2px; opacity: 0.55; }
+.ai-answer-tools:hover { opacity: 1; }
+.ai-answer-tools button.icon { width: 26px; height: 26px; }
+.ai-answer-tools svg { width: 15px !important; height: 15px !important; }
+
+.ai-typing { display: inline-flex; gap: 4px; padding: 6px 2px; }
+.ai-typing i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dim);
+  animation: ai-blink 1.2s infinite ease-in-out;
+}
+.ai-typing i:nth-child(2) { animation-delay: 0.15s; }
+.ai-typing i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes ai-blink { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+
+/* ---------------------------------------------------------------- Markdown */
+.ai-md {
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: break-word;
+}
+.ai-md > :first-child { margin-top: 0; }
+.ai-md > :last-child { margin-bottom: 0; }
+.ai-md p { margin: 0 0 10px; }
+.ai-md h1, .ai-md h2, .ai-md h3, .ai-md h4 { margin: 16px 0 8px; line-height: 1.3; }
+.ai-md h1 { font-size: 17px; }
+.ai-md h2 { font-size: 16px; }
+.ai-md h3, .ai-md h4 { font-size: 14.5px; }
+.ai-md ul, .ai-md ol { margin: 0 0 10px; padding-left: 22px; }
+.ai-md li { margin: 3px 0; }
+.ai-md li > p { margin: 0 0 4px; }
+.ai-md strong { color: #fff; }
+.ai-md a { color: var(--accent); cursor: copy; }
+.ai-md blockquote {
+  margin: 0 0 10px;
+  padding: 2px 12px;
+  border-left: 3px solid var(--line);
+  color: var(--dim);
+}
+.ai-md hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+.ai-md code {
+  font-family: "Cascadia Code", Consolas, ui-monospace, monospace;
+  font-size: 12.5px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bg);
+}
+.ai-md pre {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  overflow-x: auto;
+}
+.ai-md pre code { padding: 0; background: none; font-size: 12.5px; line-height: 1.5; }
+.ai-md table { border-collapse: collapse; margin: 0 0 10px; display: block; overflow-x: auto; max-width: 100%; }
+.ai-md th, .ai-md td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; }
+.ai-md th { background: var(--raised); }
+
+/* Matematik */
+.ai-md .katex { font-size: 1.08em; }
+.ai-math-block {
+  margin: 4px 0 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 0;
+}
+.ai-math-block .katex-display { margin: 0.4em 0; }
+.ai-math-error { color: var(--danger); }
+.ai-math-pending {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--raised);
+  color: var(--dim);
+  animation: ai-blink 1.2s infinite ease-in-out;
+}
+
+/* ---------------------------------------------------------------- Hata */
+.ai-error {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #e5484d1a;
+  border: 1px solid #e5484d55;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.ai-error p { margin: 0 0 6px; }
+.ai-error p + p { color: var(--dim); font-size: 12px; }
+.ai-error-actions { display: flex; gap: 6px; margin-top: 8px; }
+
+/* ---------------------------------------------------------------- Düğmeler */
+.ai-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+}
+#ai-panel .ai-btn:hover:not(:disabled) { background: #5a91ff; }
+.ai-btn.ghost { background: var(--raised); color: var(--fg); }
+#ai-panel .ai-btn.ghost:hover:not(:disabled) { background: var(--hover); }
+.ai-btn.small { padding: 4px 10px; flex: none; }
+.ai-link { padding: 2px 6px; color: var(--accent); font-size: 12px; }
+button.icon.mini { width: 22px; height: 22px; display: inline-grid; vertical-align: middle; }
+button.icon.mini svg { width: 13px !important; height: 13px !important; }
+
+/* ---------------------------------------------------------------- Yazma alanı */
+.ai-compose {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--line);
+}
+.ai-attach {
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+.ai-attach-top { display: flex; gap: 10px; align-items: flex-start; }
+.ai-attach-top img {
+  max-width: 55%;
+  max-height: 110px;
+  border-radius: 4px;
+  background: #fff;
+  border: 1px solid var(--line);
+  object-fit: contain;
+}
+.ai-attach-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; color: var(--dim); font-size: 12px; }
+.ai-attach-tools { display: flex; flex-wrap: wrap; margin-left: -6px; }
+.ai-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+.ai-action {
+  padding: 10px 4px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1.2;
+}
+#ai-panel .ai-action:hover:not(:disabled) { background: #5a91ff; }
+.ai-action + .ai-action { background: var(--raised); color: var(--fg); }
+#ai-panel .ai-action + .ai-action:hover:not(:disabled) { background: var(--hover); }
+
+.ai-page-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.ai-chip {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  font-size: 12px;
+}
+
+.ai-input {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 4px 4px 4px 10px;
+  border-radius: 10px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+.ai-input:focus-within { border-color: var(--accent); }
+.ai-input textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 30px;
+  max-height: 160px;
+  padding: 6px 0;
+  border: 0;
+  outline: 0;
+  resize: none;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+.ai-input textarea:disabled { opacity: 0.5; }
+#ai-panel .ai-send { width: 32px; height: 32px; background: var(--accent); color: #fff; border-radius: 8px; }
+#ai-panel .ai-send.stop { background: var(--danger); }
+#ai-panel .ai-send.stop svg { fill: currentColor; }
+
+/* ---------------------------------------------------------------- Kurulum / ayarlar */
+.ai-setup, .ai-settings { line-height: 1.55; padding-bottom: 12px; }
+.ai-setup h2, .ai-settings h2 { font-size: 15px; margin: 4px 0 10px; }
+.ai-setup p { margin: 0 0 10px; }
+.ai-setup ol { padding-left: 20px; margin: 0 0 12px; }
+.ai-setup li { margin-bottom: 8px; }
+.ai-keypages { padding-left: 14px; margin: 4px 0 0; font-size: 12px; }
+.ai-keypages li { margin-bottom: 4px; }
+.ai-url { white-space: nowrap; }
+.ai-url code {
+  font-size: 11.5px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bg);
+  user-select: all;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.ai-dim { color: var(--dim); font-size: 12px; }
+
+.ai-settings { display: flex; flex-direction: column; gap: 10px; }
+.ai-field { display: flex; flex-direction: column; gap: 4px; }
+.ai-label { font-size: 12px; color: var(--dim); font-weight: 600; }
+.ai-hint { font-size: 11.5px; color: var(--dim); line-height: 1.45; margin: 0; }
+.ai-settings input, .ai-settings select {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+.ai-settings select.ai-models { height: auto; padding: 4px; }
+.ai-settings select.ai-models option { padding: 3px 4px; }
+.ai-settings select.ai-models option:disabled { color: var(--dim); }
+.ai-settings input:focus, .ai-settings select:focus { outline: 0; border-color: var(--accent); }
+.ai-row { display: flex; gap: 6px; }
+.ai-status { font-size: 12px; min-height: 0; line-height: 1.45; }
+.ai-status:empty { display: none; }
+.ai-status.ok { color: #46c46b; }
+.ai-status.bad { color: var(--danger); }
+.ai-form-actions { display: flex; gap: 8px; margin-top: 4px; }

@@ -1,5 +1,6 @@
 // Uygulama kabuğu: sekmeler, dosyalar paneli, araç çubuğu, kısayollar.
 import * as backend from "./backend";
+import { initAi, toggleAi } from "./ai/panel";
 import type { Entry, Listing, PdfSource } from "./backend";
 import type { Tool } from "./draw";
 import { BOARD_TAB, PdfError, PdfView } from "./viewer";
@@ -547,7 +548,10 @@ function onSnip(tab: Tab, image: HTMLCanvasElement, page: number): void {
 // ------------------------------------------------------------ Kısayollar
 
 function onKey(e: KeyboardEvent): void {
-  const typing = e.target instanceof HTMLInputElement && e.target.type !== "range" && e.target.type !== "color";
+  const el = e.target;
+  const typing = el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement ||
+    (el instanceof HTMLElement && el.isContentEditable) ||
+    (el instanceof HTMLInputElement && el.type !== "range" && el.type !== "color");
   const key = e.key.toLowerCase();
   if (e.ctrlKey || e.metaKey) {
     const map: Record<string, () => void> = {
@@ -555,6 +559,7 @@ function onKey(e: KeyboardEvent): void {
       w: () => active && closeTab(active),
       b: () => toggleSidebar(),
       k: () => calc.toggle(),
+      j: () => toggleAi(),
       tab: () => cycleTab(e.shiftKey ? -1 : 1),
       "+": () => zoomBy(1.15),
       "=": () => zoomBy(1.15),
@@ -586,6 +591,7 @@ function onKey(e: KeyboardEvent): void {
 async function init(): Promise<void> {
   buildTools();
   calc = initCalculator();
+  initAi({ current: () => (active?.view ? { path: active.path, name: active.name, view: active.view } : null), toast });
 
   try {
     const text = await backend.loadState();
