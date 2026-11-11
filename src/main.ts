@@ -6,6 +6,7 @@ import type { Tool } from "./draw";
 import { BOARD_TAB, PdfError, PdfView } from "./viewer";
 import type { ToolState, ViewPos } from "./viewer";
 import { initCalculator } from "./calc";
+import { initExams } from "./exams";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -591,6 +592,7 @@ function onKey(e: KeyboardEvent): void {
 async function init(): Promise<void> {
   buildTools();
   calc = initCalculator();
+  initExams();
   initAi({ current: () => (active?.view ? { path: active.path, name: active.name, view: active.view } : null), toast });
 
   try {
