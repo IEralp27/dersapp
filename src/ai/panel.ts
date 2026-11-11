@@ -6,6 +6,7 @@
 import type { PdfView } from "../viewer";
 import "./ai.css";
 import { initFloat } from "./float";
+import { initTts, ttsAttach } from "./tts";
 import { renderMarkdown } from "./markdown";
 import { initStudy, studyRow } from "./quiz-view";
 import { ACTION_PROMPTS, FREE_QUESTION_HINT, SYSTEM_PROMPT, contextLine } from "./prompts";
@@ -312,6 +313,7 @@ async function ask(c: Conv, q: AskInput): Promise<void> {
 function addAnswerTools(bot: Turn): void {
   const bar = el("div", "ai-answer-tools");
   bar.append(iconBtn("Yanıtı kopyala (Markdown)", ICONS.copy, () => void copyText(bot.text, "Yanıt panoya kopyalandı.")));
+  ttsAttach(bar, bot); // sesli okuma düğmeleri (tts.ts)
   bot.el.append(bar);
 }
 
@@ -878,6 +880,7 @@ export function initAi(h: AiHost): void {
   });
 
   panel.append(buildResize(), head, mainEl, composeEl);
+  initTts({ panel, main: mainEl, compose: composeEl, toast: (t, k) => host.toast(t, k) }); // sesli okuma (tts.ts)
 
   toggleBtn = iconBtn("Yapay zeka paneli (Ctrl+J)", ICONS.ai, () => toggleAi());
   toggleBtn.id = "btn-ai";

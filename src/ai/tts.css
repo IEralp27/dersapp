@@ -1,0 +1,93 @@
+/* Sesli okuma: yanıt denetimleri, oynatıcı çubuğu, ayar kutusu. Renkler styles.css değişkenlerinden. */
+
+/* Okunan cümle (CSS Custom Highlight API) */
+::highlight(dersapp-tts) { background-color: #3d7eff40; color: inherit; }
+.ai-md .tts-now { background: #3d7eff26; border-radius: 4px; }
+.ai-assistant.tts-active .ai-answer-tools { opacity: 1; }
+.ai-answer-tools button.icon.tts-on { color: var(--accent); }
+.ai-answer-tools .tts-set { opacity: 0; transition: opacity 0.12s; }
+.ai-answer-tools:hover .tts-set, .ai-assistant.tts-active .tts-set, .ai-answer-tools .tts-set:focus-visible { opacity: 1; }
+
+.tts-bar {
+  flex: none;
+  padding: 3px 6px 3px 4px;
+  border-top: 1px solid var(--line);
+  background: var(--raised);
+  font-size: 12px;
+  container-type: inline-size;
+}
+.tts-bar[hidden], .tts-note[hidden] { display: none; }
+.tts-row { display: flex; align-items: center; gap: 1px; min-width: 0; }
+#ai-panel .tts-bar button.icon { width: 26px; height: 26px; border-radius: 5px; }
+#ai-panel .tts-bar svg { width: 15px; height: 15px; }
+.tts-label {
+  flex: 1;
+  min-width: 0;
+  margin-left: 6px;
+  color: var(--dim);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.tts-pos { color: var(--dim); font-variant-numeric: tabular-nums; margin: 0 6px; flex: none; }
+.tts-rate {
+  flex: none;
+  min-width: 42px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--fg);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.tts-rate:hover { background: var(--hover); }
+.tts-note { padding: 2px 4px 3px 6px; color: #f0c674; font-size: 11.5px; line-height: 1.4; }
+.tts-link { padding: 0; background: none; color: var(--accent); font-size: inherit; text-decoration: underline; cursor: pointer; }
+
+@container (max-width: 300px) { .tts-label { display: none; } }
+
+.tts-pop {
+  position: absolute;
+  right: 8px;
+  left: 8px;
+  max-width: 340px;
+  margin-left: auto;
+  z-index: 6;
+  padding: 8px 10px 10px;
+  border-radius: 8px;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  box-shadow: 0 8px 28px #0008;
+  font-size: 12.5px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tts-pop-head { display: flex; align-items: center; justify-content: space-between; }
+#ai-panel .tts-pop-head button.icon { width: 24px; height: 24px; }
+#ai-panel .tts-pop-head svg { width: 14px; height: 14px; }
+.tts-field { display: flex; flex-direction: column; gap: 3px; }
+.tts-field > span { color: var(--dim); font-size: 11.5px; }
+.tts-ctl { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.tts-ctl select {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--fg);
+}
+.tts-ctl input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
+.tts-rv { flex: none; width: 40px; text-align: right; font-variant-numeric: tabular-nums; }
+.tts-check { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.tts-check input { accent-color: var(--accent); margin: 0; }
+.tts-help { margin: 0; line-height: 1.45; color: #f0c674; }
+.tts-help.dim { color: var(--dim); }
+
+/* Cam pencere kipi */
+#ai-panel.ai-float .tts-bar { background: rgb(12 14 18 / 0.6); border-top-color: #ffffff1f; }
+#ai-panel.ai-float .tts-pop { background: rgb(28 32 39 / 0.94); border-color: #ffffff24; }
+#ai-panel.ai-float .tts-rate, #ai-panel.ai-float .tts-ctl select { background: rgb(12 14 18 / 0.72); }
