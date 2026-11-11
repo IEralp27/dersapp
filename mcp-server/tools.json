@@ -10,7 +10,10 @@
         "properties": {},
         "additionalProperties": false
       },
-      "annotations": { "readOnlyHint": true, "openWorldHint": false }
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
     },
     {
       "name": "list_documents",
@@ -21,7 +24,10 @@
         "properties": {},
         "additionalProperties": false
       },
-      "annotations": { "readOnlyHint": true, "openWorldHint": false }
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
     },
     {
       "name": "read_page",
@@ -41,14 +47,21 @@
           },
           "format": {
             "type": "string",
-            "enum": ["text", "image", "both"],
+            "enum": [
+              "text",
+              "image",
+              "both"
+            ],
             "default": "both",
             "description": "text: yalnız metin, image: yalnız görüntü, both: ikisi. / What to return."
           }
         },
         "additionalProperties": false
       },
-      "annotations": { "readOnlyHint": true, "openWorldHint": false },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
       "timeoutSec": 90
     },
     {
@@ -73,10 +86,16 @@
             "description": "Son sayfa (dahil). to - from + 1 en çok 30 olabilir. / Last page, inclusive; at most 30 pages in total."
           }
         },
-        "required": ["from", "to"],
+        "required": [
+          "from",
+          "to"
+        ],
         "additionalProperties": false
       },
-      "annotations": { "readOnlyHint": true, "openWorldHint": false },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
       "timeoutSec": 120
     },
     {
@@ -96,10 +115,17 @@
             "description": "Gidilecek sayfa (1'den başlar). / Target page, 1-based."
           }
         },
-        "required": ["page"],
+        "required": [
+          "page"
+        ],
         "additionalProperties": false
       },
-      "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false }
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
     },
     {
       "name": "show_test",
@@ -110,22 +136,94 @@
         "properties": {
           "title": {
             "type": "string",
-            "description": "Testin başlığı, ör. 'Rulmanlar - 5 soru'. / Quiz title."
+            "description": "Testin kısa başlığı; konuyu söyler (ör. \"Transfer fonksiyonları: DC kazancı ve kutuplar\"). Verilmezse \"Test\"."
           },
           "questions": {
             "type": "array",
             "minItems": 1,
-            "description": "Sorular. / The questions.",
+            "maxItems": 60,
+            "description": "Sorular (en az 1, en çok 60). Herhangi bir soru geçersizse test hiç gösterilmez; hata mesajındaki soru numaralarına göre düzeltip tüm testi yeniden gönder. Metinlerde Markdown kullanılabilir; matematiği LaTeX ile yaz: satır içinde $...$, ayrı satırda $$...$$ (JSON içinde ters bölü çift yazılır: \"$\\\\frac{1}{4}$\"). Düz yazıyla kesir/üs yazma. Ondalık ayırıcı olarak virgül kullan ($2{,}5$).",
             "items": {
               "type": "object",
-              "additionalProperties": true
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "mc",
+                    "tf",
+                    "num"
+                  ],
+                  "description": "Soru türü. mc: çoktan seçmeli (2-6 şık, tek doğru), tf: doğru/yanlış, num: sonucu tek bir sayı olan hesap sorusu. Verilmezse: \"options\" varsa mc, \"answer\" true/false ise tf, değilse num sayılır."
+                },
+                "question": {
+                  "type": "string",
+                  "description": "Soru metni (Markdown + LaTeX, $...$). Tek başına anlaşılır olsun: gerekli tüm değerler soruda yazsın. tf'de doğru mu yanlış mı değerlendirilecek tek bir ifade."
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 2,
+                  "maxItems": 6,
+                  "uniqueItems": true,
+                  "description": "Yalnızca mc: şıkların metni (2-6 dolu ve birbirinden farklı şık; önerilen 4). Başına \"A)\" gibi harf koyma; harfler sırayla A, B, C, D, E, F verilir."
+                },
+                "answer": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ],
+                  "description": "Doğru cevap. mc: doğru şıkkın harfi (\"A\"-\"F\"; 0 tabanlı şık sırası da kabul edilir). tf: true ya da false. num: JSON sayısı, nokta ile (ör. 2.5)."
+                },
+                "tolerance": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Yalnızca num: kabul edilecek mutlak sapma (yuvarlama payı). Verilmezse cevabın %1'i. Tam sayı sonuçta 0 olabilir."
+                },
+                "unit": {
+                  "type": "string",
+                  "description": "Yalnızca num: cevabın birimi (ör. \"s\", \"N·m\"); birimsizse \"\"."
+                },
+                "explanation": {
+                  "type": "string",
+                  "description": "Çözüm açıklaması (Markdown + LaTeX): numaralı kısa adımlar, her adımda ne yapıldığı ve neden. mc'de en olası yanlış şıkkın neden yanlış olduğu da. Sonuç ekranında gösterilir; mutlaka yaz."
+                },
+                "topic": {
+                  "type": "string",
+                  "description": "Sorunun ölçtüğü konu, 1-4 kelime (ör. \"DC kazancı\"). Aynı konudaki sorularda aynı ifadeyi kullan; sonuçlar konuya göre özetlenir. Verilmezse \"Genel\"."
+                },
+                "page": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Sorunun dayandığı, etkin belgedeki sayfa numarası (1'den başlar). Belgede olmayan sayfa verilirse 1. sayfa sayılır. Sonuç ekranındaki \"bu sayfayı tekrar oku\" bağlantısı buraya gider."
+                }
+              },
+              "required": [
+                "type",
+                "question",
+                "answer"
+              ]
             }
           }
         },
-        "required": ["title", "questions"],
-        "additionalProperties": false
+        "required": [
+          "title",
+          "questions"
+        ]
       },
-      "annotations": { "readOnlyHint": false, "destructiveHint": false, "openWorldHint": false }
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
     },
     {
       "name": "get_test_results",
@@ -144,7 +242,10 @@
         },
         "additionalProperties": false
       },
-      "annotations": { "readOnlyHint": true, "openWorldHint": false }
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
     },
     {
       "name": "list_exams",
@@ -155,7 +256,10 @@
         "properties": {},
         "additionalProperties": false
       },
-      "annotations": { "readOnlyHint": true, "openWorldHint": false }
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
     },
     {
       "name": "add_exam",
@@ -187,10 +291,17 @@
             "description": "Not, ör. 'vize', 'konular 1-4. bölüm'. / Free-form note."
           }
         },
-        "required": ["course", "date"],
+        "required": [
+          "course",
+          "date"
+        ],
         "additionalProperties": false
       },
-      "annotations": { "readOnlyHint": false, "destructiveHint": false, "openWorldHint": false }
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
     }
   ]
 }

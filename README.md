@@ -27,6 +27,10 @@ npm run tauri build
 
 Çıktı: `src-tauri/target/release/bundle/`
 
+## Kendi yapay zeka uygulamanı bağlama (MCP)
+
+Claude Desktop, Claude Code, Gemini CLI gibi uygulamalar DersApp'e bağlanıp açık PDF'i okuyabilir ve test gönderebilir. Kurulum: `docs/MCP.md`.
+
 ## Klasörler
 
 - `src/` arayüz (TypeScript)
@@ -36,7 +40,10 @@ npm run tauri build
   - `select.ts` seç/taşı aracı
   - `calc.ts`, `calc-engine.ts` hesap makinesi (`node src/calc-engine.test.ts` ile test)
   - `ai/` yapay zeka paneli; öğretme talimatı `ai/prompts.ts` içinde
+  - `exams.ts` sınav takvimi
+  - `mcp.ts` MCP köprüsü (bağlı yapay zekadan gelen istekleri işler)
   - `backend.ts` Rust tarafına köprü
+- `mcp-server/` ayrı MCP sunucusu (`cargo build --release` ile derlenir)
 - `src-tauri/` Rust tarafı
   - `src/store.rs` dosya okuma, klasör listeleme, ayar ve not kaydı
   - `src/lib.rs` arayüzün çağırdığı komutlar
