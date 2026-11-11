@@ -4,6 +4,7 @@ import type { Entry, Listing, PdfSource } from "./backend";
 import type { Tool } from "./draw";
 import { PdfError, PdfView } from "./viewer";
 import type { ToolState, ViewPos } from "./viewer";
+import { initCalculator } from "./calc";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -39,6 +40,7 @@ const saved: Saved = {
   sidebar: true, color: COLORS[0], size: 2,
 };
 const tools: ToolState = { tool: "none", color: COLORS[0], size: 2 };
+let calc: { toggle(): void };
 const tabs: Tab[] = [];
 let active: Tab | null = null;
 let listing: Listing | null = null;
@@ -447,6 +449,11 @@ function buildTools(): void {
   redoBtn = iconButton("İleri al (Ctrl+Y)", "M16 5l5 5-5 5M21 10H11a5 5 0 000 10h3", redo);
   clearBtn = iconButton("Bu sayfadaki çizimleri sil", "M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13", clearPage);
   host.append(undoBtn, redoBtn, clearBtn);
+
+  host.append(divider());
+  const calcBtn = iconButton("Hesap makinesi (Ctrl+K)", "M6 3h12v18H6zM9 7h6M9 11h.01M12 11h.01M15 11h.01M9 15h.01M12 15h.01M15 15h.01M9 18h.01M12 18h.01M15 18h.01", () => calc.toggle());
+  calcBtn.id = "btn-calc";
+  host.append(calcBtn);
 }
 
 function divider(): HTMLElement {
@@ -527,6 +534,7 @@ function onKey(e: KeyboardEvent): void {
       o: () => void openDialog(),
       w: () => active && closeTab(active),
       b: () => toggleSidebar(),
+      k: () => calc.toggle(),
       tab: () => cycleTab(e.shiftKey ? -1 : 1),
       "+": () => zoomBy(1.15),
       "=": () => zoomBy(1.15),
@@ -556,6 +564,7 @@ function onKey(e: KeyboardEvent): void {
 
 async function init(): Promise<void> {
   buildTools();
+  calc = initCalculator();
 
   try {
     const text = await backend.loadState();
