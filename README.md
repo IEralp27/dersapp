@@ -1,0 +1,57 @@
+# DersApp
+
+Ders çalışmak için PDF okuyucu. Tauri (Rust) + TypeScript.
+
+## İlk kurulum (bir kez)
+
+Gerekenler: Rust, Node.js, Visual Studio'da "Desktop development with C++".
+
+```
+npm install
+```
+
+## Çalıştırma
+
+```
+npm run tauri dev
+```
+
+İlk çalıştırma Rust paketlerini indirip derlediği için 5-10 dakika sürebilir.
+Sonrakiler birkaç saniyede açılır.
+
+## Kurulum dosyası üretme
+
+```
+npm run tauri build
+```
+
+Çıktı: `src-tauri/target/release/bundle/`
+
+## Klasörler
+
+- `src/` arayüz (TypeScript)
+  - `main.ts` sekmeler, dosyalar paneli, araç çubuğu, kısayollar
+  - `viewer.ts` PDF görünümü ve sayfa üstü çizim
+  - `draw.ts` çizim modeli (şekiller, geri al, silgi)
+  - `backend.ts` Rust tarafına köprü
+- `src-tauri/` Rust tarafı
+  - `src/store.rs` dosya okuma, klasör listeleme, ayar ve not kaydı
+  - `src/lib.rs` arayüzün çağırdığı komutlar
+
+## Kısayollar
+
+| Tuş | İş |
+| --- | --- |
+| Ctrl+O | PDF aç |
+| Ctrl+W | Sekmeyi kapat |
+| Ctrl+Tab | Sonraki sekme |
+| Ctrl+B | Dosyalar panelini aç/kapat |
+| Ctrl + / - / 0 | Yakınlaştır / uzaklaştır / %100 |
+| Ctrl+fare tekerleği | Yakınlaştır |
+| V P H L A R O E | Fare, Kalem, Fosforlu, Çizgi, Ok, Dikdörtgen, Elips, Silgi |
+| 1-8 | Renk |
+| Shift (çizerken) | Düz çizgi, kare, daire |
+| Ctrl+Z / Ctrl+Y | Geri al / ileri al |
+| Esc | Fare moduna dön |
+
+Çizimler PDF dosyasına dokunmaz; uygulamanın veri klasöründe ayrı saklanır.

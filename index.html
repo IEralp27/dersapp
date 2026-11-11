@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DersApp</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+  <body>
+    <header id="topbar">
+      <button id="btn-sidebar" class="icon" title="Dosyalar paneli (Ctrl+B)" aria-label="Dosyalar paneli">
+        <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+      </button>
+      <div id="tabs" role="tablist"></div>
+      <button id="btn-open" class="icon" title="PDF aç (Ctrl+O)" aria-label="PDF aç">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
+      </button>
+      <div id="doc-controls" hidden>
+        <input id="page-input" type="text" inputmode="numeric" title="Sayfaya git" aria-label="Sayfa" />
+        <span id="page-count"></span>
+        <span class="sep"></span>
+        <button id="btn-zoom-out" class="icon" title="Uzaklaştır (Ctrl -)" aria-label="Uzaklaştır">
+          <svg viewBox="0 0 24 24"><path d="M5 12h14" /></svg>
+        </button>
+        <button id="btn-zoom-reset" title="%100 (Ctrl+0)"></button>
+        <button id="btn-zoom-in" class="icon" title="Yakınlaştır (Ctrl +)" aria-label="Yakınlaştır">
+          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
+        </button>
+        <button id="btn-fit" class="icon" title="Genişliğe sığdır" aria-label="Genişliğe sığdır">
+          <svg viewBox="0 0 24 24"><path d="M4 5v14M20 5v14M8 12h8M8 12l3-3M8 12l3 3M16 12l-3-3M16 12l-3 3" /></svg>
+        </button>
+      </div>
+    </header>
+
+    <div id="main">
+      <aside id="sidebar">
+        <div class="side-head">
+          <span>Dosyalar</span>
+          <button id="btn-folder" title="Ders klasörünü seç">Klasör seç</button>
+        </div>
+        <input id="filter" type="search" placeholder="Dosya ara…" aria-label="Dosya ara" />
+        <div id="side-scroll">
+          <section id="folder-section" hidden>
+            <div id="folder-path"></div>
+            <ul id="folder-list" class="file-list"></ul>
+          </section>
+          <section id="recent-section" hidden>
+            <h2>Son açılanlar</h2>
+            <ul id="recent-list" class="file-list"></ul>
+          </section>
+          <p id="side-empty">Henüz dosya yok. Bir ders klasörü seçersen içindeki PDF'ler burada listelenir.</p>
+        </div>
+      </aside>
+
+      <nav id="tools" aria-label="Çizim araçları"></nav>
+
+      <section id="stage">
+        <div id="welcome">
+          <h1>DersApp</h1>
+          <p>Bir PDF aç ya da dosyayı bu pencereye sürükleyip bırak.</p>
+          <button id="btn-welcome-open" class="primary">PDF aç</button>
+          <p class="hint">Ctrl+O ile de açabilirsin</p>
+        </div>
+      </section>
+    </div>
+
+    <div id="toasts" aria-live="polite"></div>
+  </body>
+</html>
