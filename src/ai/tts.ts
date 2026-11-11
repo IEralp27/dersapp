@@ -1,45 +1,26 @@
-// Yapay zeka yanıtlarını sesli okuma: seslendirici arayüzü, tarayıcı seslendiricisi (Web Speech),
-// cümle kuyruğu, okunan cümleyi vurgulama, yanıt başına denetimler ve panel altındaki oynatıcı çubuğu.
+// Yapay zeka yanıtlarını sesli okuma: seçilebilir seslendirme motorları, cümle kuyruğu, okunan cümleyi
+// vurgulama, yanıt başına denetimler ve panel altındaki oynatıcı çubuğu.
 //
-// Metin -> konuşma dönüşümü tts-text.ts'te. Bulut seslendirme ileride "Speaker" arayüzünün başka bir
-// uygulaması olarak eklenebilir; oynatıcı yalnızca bu arayüzü kullanır.
+// Metin -> konuşma dönüşümü tts-text.ts'te. Oynatıcı yalnızca "Speaker" arayüzünü (tts-engine.ts) kullanır.
+//
+// YENİ MOTOR EKLEMEK
+//  1. Yeni bir dosya aç: src/ai/tts-<ad>.ts ve içinde registerEngine({ id, name, description, fields,
+//     available, create }) çağır (tts-engine.ts'teki TtsEngine arayüzü; örnek: tts-cloud.ts).
+//  2. "Metni ver, ses baytı al" türü bir motorsa (bulut ya da Rust/Tauri komutu) Speaker'ı kendin yazma:
+//     tts-audio.ts'teki ClipProvider'ı (key + fetch -> {bytes, mime}) yaz ve `new BytesSpeaker(id, () => provider)`
+//     döndür; önbellek, önceden isteme, iptal, duraklat/devam ve hız hazır gelir.
+//  3. Aşağıdaki import satırlarının yanına `import "./tts-<ad>";` ekle. Ayarlar ekranı, seçim ve hata durumunda
+//     sistem sesine düşme otomatik çalışır.
 import "./tts.css";
 import { OBJ, guessLang, toSpeech } from "./tts-text";
 import type { Lang, Segment } from "./tts-text";
+import { getEngine, listEngines, registerEngine } from "./tts-engine";
+import type { Avail, EngineConfig, SpeakEvents, SpeakOpts, Speaker, TtsEngine, VoiceInfo } from "./tts-engine";
+import "./tts-cloud";
 
-// ================================================================ Seslendirici arayüzü
+export type { Avail, EngineConfig, SpeakEvents, SpeakOpts, Speaker, TtsEngine, VoiceInfo };
 
-export interface VoiceInfo {
-  id: string;
-  name: string;
-  lang: string;
-  local: boolean;
-  isDefault: boolean;
-}
-
-export interface SpeakOpts {
-  voiceId: string | null;
-  rate: number;
-  lang: string;
-}
-
-export interface SpeakEvents {
-  start(): void;
-  end(): void;
-  error(message: string): void;
-}
-
-/** Tek bir metin parçasını seslendiren motor. Olaylardan yalnızca biri (end ya da error) bir kez gelir. */
-export interface Speaker {
-  readonly kind: string;
-  available(): boolean;
-  voices(): VoiceInfo[];
-  /** Ses listesi yüklendi mi (tarayıcılar listeyi geç verir) */
-  voicesReady(): boolean;
-  onVoicesChanged(cb: () => void): void;
-  speak(text: string, opts: SpeakOpts, ev: SpeakEvents): void;
-  stop(): void;
-}
+// ================================================================ Sistem sesi motoru
 
 /** Tarayıcının yerleşik seslendiricisi (Windows'ta WebView2 sistemdeki sesleri kullanır). */
 class WebSpeechSpeaker implements Speaker {
@@ -196,29 +177,46 @@ class WebSpeechSpeaker implements Speaker {
 // ================================================================ Ayarlar
 
 interface TtsSettings {
-  /** "" = otomatik (Türkçe ses varsa o) */
-  voice: string;
+  /** Seçili seslendirme motorunun kimliği */
+  engine: string;
+  /** Motor başına ayarlar (sistem sesinde voice: "" = otomatik, Türkçe ses varsa o) */
+  cfg: Record<string, EngineConfig>;
   rate: number;
   auto: boolean;
 }
+
+const SYSTEM = "system";
 
 const KEY = "dersapp.ai.tts";
 const RATES = [0.75, 1, 1.25, 1.5];
 const clampRate = (r: number) => Math.min(1.5, Math.max(0.75, Math.round((Number(r) || 1) * 20) / 20));
 
 function loadSettings(): TtsSettings {
-  const d: TtsSettings = { voice: "", rate: 1, auto: false };
+  const d: TtsSettings = { engine: SYSTEM, cfg: {}, rate: 1, auto: false };
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const o = JSON.parse(raw);
-      return { voice: typeof o.voice === "string" ? o.voice : "", rate: clampRate(o.rate), auto: o.auto === true };
+      const cfg: Record<string, EngineConfig> = {};
+      if (o.cfg && typeof o.cfg === "object") {
+        for (const [id, c] of Object.entries(o.cfg as Record<string, unknown>)) {
+          if (!c || typeof c !== "object") continue;
+          cfg[id] = {};
+          for (const [k, v] of Object.entries(c as Record<string, unknown>)) if (typeof v === "string") cfg[id][k] = v;
+        }
+      }
+      // eski sürüm: ses seçimi en üst düzeyde saklanıyordu
+      if (typeof o.voice === "string" && cfg[SYSTEM]?.voice === undefined) cfg[SYSTEM] = { ...cfg[SYSTEM], voice: o.voice };
+      return { engine: typeof o.engine === "string" && o.engine ? o.engine : SYSTEM, cfg, rate: clampRate(o.rate), auto: o.auto === true };
     }
   } catch {
     // varsayılanlar
   }
   return d;
 }
+
+const cfgOf = (id: string): EngineConfig => (settings.cfg[id] ??= {});
+const sysVoice = () => cfgOf(SYSTEM).voice ?? "";
 
 // ================================================================ Durum
 
@@ -227,6 +225,8 @@ export interface TtsTurn {
   text: string;
   el: HTMLElement;
   body?: HTMLElement;
+  /** "Sesi dene" örneği: panelde görünmez, bağlı olmasa da durdurulmaz */
+  sample?: boolean;
 }
 
 interface Host {
@@ -239,7 +239,12 @@ interface Host {
 type State = "idle" | "playing" | "paused";
 
 let host: Host | null = null;
+/** Sistem sesi (her zaman var; bulut motoru hata verirse buna düşülür) */
+let system: Speaker | null = null;
+/** Şu anki okumada kullanılan seslendirici */
 let speaker: Speaker;
+const speakers = new Map<string, Speaker>();
+const avail = new Map<string, Avail>();
 let settings: TtsSettings = loadSettings();
 let state: State = "idle";
 let turn: TtsTurn | null = null;
@@ -248,6 +253,7 @@ let ranges: (Range | null)[] = [];
 let idx = 0;
 let lang: Lang = "tr";
 let errors = 0;
+let stale = false;
 let warnedNoTr = false;
 const controls = new WeakMap<HTMLElement, { play: HTMLButtonElement; stop: HTMLButtonElement }>();
 const turns = new WeakMap<HTMLElement, TtsTurn>();
@@ -313,21 +319,54 @@ function voiceRank(v: VoiceInfo): number {
   return (/natural|neural|online/i.test(v.name) ? 4 : 0) + (v.local ? 2 : 0) + (v.isDefault ? 1 : 0);
 }
 
+const sys = (): Speaker => (system ??= new WebSpeechSpeaker());
+
 function bestVoice(l: Lang): VoiceInfo | null {
-  const vs = speaker.voices().filter((v) => v.lang.toLowerCase().startsWith(l));
+  const vs = sys().voices().filter((v) => v.lang.toLowerCase().startsWith(l));
   vs.sort((a, b) => voiceRank(b) - voiceRank(a));
   return vs[0] ?? null;
 }
 
-const hasTurkish = () => speaker.voices().some((v) => v.lang.toLowerCase().startsWith("tr"));
+const hasTurkish = () => sys().voices().some((v) => v.lang.toLowerCase().startsWith("tr"));
 
 function pickVoice(l: Lang): { id: string | null; lang: string } {
-  const chosen = settings.voice ? speaker.voices().find((v) => v.id === settings.voice) : undefined;
+  const chosen = sysVoice() ? sys().voices().find((v) => v.id === sysVoice()) : undefined;
   if (chosen) return { id: chosen.id, lang: chosen.lang };
   const best = bestVoice(l);
   if (best) return { id: best.id, lang: best.lang };
   return { id: null, lang: l === "tr" ? "tr-TR" : "en-US" };
 }
+
+const noTurkish = () => sys().voicesReady() && !hasTurkish();
+
+/** Birinci motor: tarayıcının/sistemin kendi sesi. Ücretsiz, çevrimdışı; davranışı eskisiyle aynı. */
+registerEngine({
+  id: SYSTEM,
+  order: 0,
+  name: "Sistem sesi (ücretsiz, çevrimdışı)",
+  description: "Bilgisayarında yüklü sesleri kullanır; internet ve ücret gerekmez. Ses kalitesi bilgisayarındaki seslere bağlıdır.",
+  fields: [{
+    key: "voice", label: "Ses", kind: "select",
+    options: () => {
+      const best = bestVoice("tr");
+      const vs = [...sys().voices()].sort((a, b) => {
+        const ta = a.lang.toLowerCase().startsWith("tr") ? 0 : 1, tb = b.lang.toLowerCase().startsWith("tr") ? 0 : 1;
+        return ta - tb || a.lang.localeCompare(b.lang) || a.name.localeCompare(b.name);
+      });
+      return [{ value: "", label: "Otomatik" + (best ? ` (${best.name})` : "") }, ...vs.map((v) => ({ value: v.id, label: `${v.name} · ${v.lang}` }))];
+    },
+  }],
+  available: () => (sys().available() ? { ok: true } : {
+    ok: false, reason: "Bu bilgisayarda sistem sesi desteklenmiyor. Başka bir seslendirici seç.",
+  }),
+  notes: () => (noTurkish() ? [{
+    warn: true,
+    text: "Bu bilgisayarda Türkçe ses yüklü değil, bu yüzden formüller ve Türkçe sözcükler yabancı aksanla okunur. "
+      + "Windows Ayarları'nın dil (ya da konuşma) bölümünden Türkçe dil paketini konuşma özelliğiyle birlikte ekleyip uygulamayı "
+      + "yeniden başlatırsan Türkçe ses burada görünür. O zamana kadar listedeki bir sesle okunur.",
+  }] : []),
+  create: () => sys(),
+});
 
 // ================================================================ Vurgulama
 
@@ -425,9 +464,37 @@ function highlight(i: number): void {
 
 // ================================================================ Oynatıcı
 
+/** Seçili motorun Speaker'ı; kullanılamıyorsa nedenini söyleyip sistem sesine düşer. Hiçbiri yoksa null. */
+function resolveSpeaker(): Speaker | null {
+  const e = getEngine(settings.engine) ?? getEngine(SYSTEM)!;
+  let reason = "";
+  if (e.id !== SYSTEM) {
+    const a = e.available();
+    if (a instanceof Promise || a.ok) {
+      let sp = speakers.get(e.id);
+      if (!sp) speakers.set(e.id, (sp = e.create(() => cfgOf(e.id))));
+      if (sp.available()) return sp;
+      reason = "Bu cihazda desteklenmiyor.";
+    } else reason = a.reason;
+    if (sys().available()) {
+      host?.toast(`${e.name} şu anda kullanılamıyor. ${reason} Bu okuma için sistem sesi kullanılıyor.`, "info");
+      return sys();
+    }
+    host?.toast(`${e.name} şu anda kullanılamıyor. ${reason}`);
+    return null;
+  }
+  if (sys().available()) return sys();
+  host?.toast("Bu bilgisayarda sistem sesi desteklenmiyor. Sesli okuma ayarlarından başka bir seslendirici seç.");
+  return null;
+}
+
 function play(t: TtsTurn, from = 0): void {
-  if (!host || !speaker.available()) return;
+  if (!host) return;
   stop(true);
+  const sp = resolveSpeaker();
+  if (!sp) return;
+  speaker = sp;
+  stale = false;
   lang = guessLang(t.text);
   segs = toSpeech(t.text, lang);
   if (!segs.length) {
@@ -439,7 +506,7 @@ function play(t: TtsTurn, from = 0): void {
   idx = Math.max(0, Math.min(from, segs.length - 1));
   errors = 0;
   state = "playing";
-  if (lang === "tr" && speaker.voicesReady() && !hasTurkish() && !settings.voice && !warnedNoTr) {
+  if (lang === "tr" && speaker === system && noTurkish() && !sysVoice() && !warnedNoTr) {
     warnedNoTr = true;
     host.toast("Bilgisayarında Türkçe ses bulunamadı; yanıt mevcut bir sesle okunuyor. Ayrıntı için oynatıcıdaki ayarlara bak.", "info");
   }
@@ -451,9 +518,11 @@ function speakCurrent(): void {
   const s = segs[idx];
   if (!s) return finish();
   highlight(idx);
-  const v = pickVoice(lang);
+  const v = speaker === system ? pickVoice(lang) : { id: null, lang: lang === "tr" ? "tr-TR" : "en-US" };
   const mine = turn;
-  speaker.speak(s.text, { voiceId: v.id, rate: settings.rate, lang: v.lang }, {
+  const sp = speaker;
+  const opts = { voiceId: v.id, rate: settings.rate, lang: v.lang };
+  sp.speak(s.text, opts, {
     start: () => {},
     end: () => {
       if (turn !== mine || state !== "playing") return;
@@ -466,7 +535,27 @@ function speakCurrent(): void {
       }
     },
     error: (msg) => {
-      if (turn !== mine || state !== "playing") return;
+      if (turn !== mine || speaker !== sp) return;
+      if (state === "paused") {
+        stale = true; // duraklatılmışken hata geldi: devam edince cümle yeniden denenir
+        return;
+      }
+      if (state !== "playing") return;
+      if (sp !== system) {
+        // Seçili motor çalışırken hata verdi: nedenini söyle, bu okuma için sistem sesine düş
+        sp.stop();
+        const e = getEngine(settings.engine);
+        if (sys().available()) {
+          host?.toast(`${e?.name ?? "Seslendirici"} hata verdi: ${msg} Bu okuma için sistem sesi kullanılıyor.`);
+          speaker = sys();
+          speakCurrent();
+          sync();
+        } else {
+          host?.toast(`${e?.name ?? "Seslendirici"} hata verdi: ${msg}`);
+          stop();
+        }
+        return;
+      }
       if (++errors >= 3) {
         host?.toast("Sesli okuma durdu: seslendirici yanıt vermiyor (" + msg + "). Başka bir ses seçmeyi dene.");
         stop();
@@ -480,6 +569,8 @@ function speakCurrent(): void {
       }
     },
   });
+  // Sıradaki 1-2 cümleyi önceden hazırla (ağ motorlarında cümle arası boşluk olmasın)
+  sp.prefetch?.(segs.slice(idx + 1, idx + 3).map((x) => x.text), opts);
 }
 
 function finish(): void {
@@ -500,8 +591,8 @@ export function stop(quiet = false): void {
 
 function pause(): void {
   if (state !== "playing") return;
-  // Gerçek pause/resume motorlar arasında tutarsız: cümleyi kesip yeniden başlatmak her yerde çalışır
-  speaker.stop();
+  // Gerçek pause/resume motorlar arasında tutarsız: yoksa cümleyi kesip yeniden başlatmak her yerde çalışır
+  if (!speaker.pause?.()) speaker.stop();
   state = "paused";
   sync();
 }
@@ -509,7 +600,10 @@ function pause(): void {
 function resume(): void {
   if (state !== "paused") return;
   state = "playing";
-  speakCurrent();
+  if (stale || !speaker.resume?.()) {
+    stale = false;
+    speakCurrent();
+  }
   sync();
 }
 
@@ -517,14 +611,19 @@ function jump(d: number): void {
   if (state === "idle") return;
   idx = Math.max(0, Math.min(segs.length - 1, idx + d));
   if (state === "playing") speakCurrent();
-  else highlight(idx);
+  else {
+    speaker.stop(); // duraklatılmış sesi bırak; devam edince yeni cümle baştan okunur
+    stale = true;
+    highlight(idx);
+  }
   sync();
 }
 
 function setRate(r: number): void {
   settings.rate = clampRate(r);
   saveSettings();
-  if (state === "playing") speakCurrent(); // yeni hız bir sonraki konuşmada geçerli: cümleyi yeniden başlat
+  const live = state !== "idle" && speaker.setRate?.(settings.rate);
+  if (state === "playing" && !live) speakCurrent(); // anında hız değiştiremeyen motor: cümleyi yeniden başlat
   sync();
 }
 
@@ -557,7 +656,7 @@ function sync(old: TtsTurn | null = null): void {
   setIcon(barPlay, state === "playing" ? ICONS.pause : ICONS.play, state === "playing" ? "Duraklat" : "Devam et");
   barPos.textContent = `${idx + 1}/${segs.length}`;
   barRate.textContent = rateLabel(settings.rate);
-  barNote.hidden = !(lang === "tr" && speaker.voicesReady() && !hasTurkish() && !settings.voice);
+  barNote.hidden = !(lang === "tr" && speaker === system && noTurkish() && !sysVoice());
   if (pop) fillPop();
 }
 
@@ -624,45 +723,158 @@ function togglePop(force?: boolean): void {
     });
     host.panel.append(pop);
   }
-  fillPop();
+  refreshAvail();
+  fillPop(true);
 }
 
-function fillPop(): void {
+const SAMPLE = "Merhaba, ben DersApp. Örnek bir kesir: $\\frac{1}{2}$, yani yarım. Sesim sana böyle duyuluyor.";
+
+/** Seçili motorla kısa bir örnek okur (oynatıcı çubuğu da görünür; Durdur ile kesilir). */
+function speakSample(): void {
+  if (!host) return;
+  play({ text: SAMPLE, el: document.createElement("div"), sample: true });
+}
+
+function availOf(e: TtsEngine): Avail {
+  const a = e.available();
+  if (a instanceof Promise) return avail.get(e.id) ?? { ok: true };
+  return a;
+}
+
+/** Eşzamansız kullanılabilirlik denetimi yapan motorlar için sonucu tazeler */
+function refreshAvail(): void {
+  for (const e of listEngines()) {
+    const a = e.available();
+    if (a instanceof Promise) {
+      a.then((r) => {
+        avail.set(e.id, r);
+        if (pop) fillPop();
+      }, () => avail.set(e.id, { ok: false, reason: "Kullanılabilirlik denetlenemedi." }));
+    }
+  }
+}
+
+function fillPop(force = false): void {
   if (!pop || !host) return;
   const focused = document.activeElement;
+  // Yazarken (okuma ilerleyip arayüz tazelenirken) imleç kaybolmasın
+  if (!force && focused && pop.contains(focused) && focused instanceof HTMLInputElement && focused.type === "text") return;
   const hadFocus = focused && pop.contains(focused) ? (focused as HTMLElement).dataset.k : "";
+  const top = pop.scrollTop;
   pop.replaceChildren();
   const head = document.createElement("div");
   head.className = "tts-pop-head";
   const h = document.createElement("b");
   h.textContent = "Sesli okuma";
   head.append(h, btn("Kapat", ICONS.close, closePop));
+  pop.append(head);
 
-  const sel = document.createElement("select");
-  sel.dataset.k = "voice";
-  const auto = document.createElement("option");
-  auto.value = "";
-  const best = bestVoice("tr");
-  auto.textContent = "Otomatik" + (best ? ` (${best.name})` : "");
-  sel.append(auto);
-  const vs = [...speaker.voices()].sort((a, b) => {
-    const ta = a.lang.toLowerCase().startsWith("tr") ? 0 : 1, tb = b.lang.toLowerCase().startsWith("tr") ? 0 : 1;
-    return ta - tb || a.lang.localeCompare(b.lang) || a.name.localeCompare(b.name);
-  });
-  for (const v of vs) {
-    const o = document.createElement("option");
-    o.value = v.id;
-    o.textContent = `${v.name} · ${v.lang}`;
-    sel.append(o);
+  // ---- Seslendirici seçimi
+  const engines = listEngines();
+  // Seçili motor kullanılamıyorsa (ör. sağlayıcı Anthropic'e çevrildi) sistem sesi gösterilir; kayıtlı seçim bozulmaz,
+  // sağlayıcı düzelince motor yeniden seçili görünür.
+  const chosen = getEngine(settings.engine);
+  const cur = chosen && availOf(chosen).ok ? chosen : getEngine(SYSTEM)!;
+  const group = document.createElement("div");
+  group.className = "tts-engines";
+  group.setAttribute("role", "radiogroup");
+  group.setAttribute("aria-label", "Seslendirici");
+  for (const e of engines) {
+    const a = availOf(e);
+    const row = document.createElement("label");
+    row.className = "tts-eng" + (a.ok ? "" : " tts-off");
+    const r = document.createElement("input");
+    r.type = "radio";
+    r.name = "tts-engine";
+    r.value = e.id;
+    r.dataset.k = "engine-" + e.id;
+    r.checked = e.id === cur.id;
+    r.disabled = !a.ok; // kullanılamayan seçilemez
+    r.addEventListener("change", () => {
+      if (!r.checked) return;
+      settings.engine = e.id;
+      saveSettings();
+      if (state !== "idle") stop();
+      fillPop(true);
+    });
+    const text = document.createElement("span");
+    const name = document.createElement("b");
+    name.textContent = e.name;
+    const desc = document.createElement("small");
+    desc.textContent = e.description;
+    text.append(name, desc);
+    if (!a.ok) {
+      const why = document.createElement("small");
+      why.className = "tts-why";
+      why.textContent = "Kullanılamıyor: " + a.reason;
+      text.append(why);
+    }
+    row.append(r, text);
+    group.append(row);
   }
-  sel.value = settings.voice && vs.some((v) => v.id === settings.voice) ? settings.voice : "";
-  sel.addEventListener("change", () => {
-    settings.voice = sel.value;
-    saveSettings();
-    if (state === "playing") speakCurrent();
-    sync();
-  });
+  const gl = document.createElement("span");
+  gl.className = "tts-sec";
+  gl.textContent = "Seslendirici";
+  pop.append(gl, group);
 
+  // ---- Seçili motorun kendi alanları
+  const cfg = cfgOf(cur.id);
+  const field = (label: string, ...ctl: HTMLElement[]) => {
+    const l = document.createElement("label");
+    l.className = "tts-field";
+    const s = document.createElement("span");
+    s.textContent = label;
+    const r = document.createElement("div");
+    r.className = "tts-ctl";
+    r.append(...ctl);
+    l.append(s, r);
+    return l;
+  };
+  for (const f of cur.fields) {
+    let ctl: HTMLElement;
+    if (f.kind === "select") {
+      const sel = document.createElement("select");
+      sel.dataset.k = "f-" + f.key;
+      const opts = f.options?.() ?? [];
+      for (const o of opts) {
+        const op = document.createElement("option");
+        op.value = o.value;
+        op.textContent = o.label;
+        sel.append(op);
+      }
+      sel.value = opts.some((o) => o.value === (cfg[f.key] ?? "")) ? cfg[f.key] ?? "" : "";
+      sel.addEventListener("change", () => {
+        cfg[f.key] = sel.value;
+        saveSettings();
+        if (state === "playing" && speaker === (cur.id === SYSTEM ? system : speakers.get(cur.id))) speakCurrent();
+        sync();
+      });
+      ctl = sel;
+    } else {
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.dataset.k = "f-" + f.key;
+      inp.value = cfg[f.key] ?? "";
+      inp.placeholder = f.placeholder?.() ?? "";
+      inp.spellcheck = false;
+      inp.autocomplete = "off";
+      inp.addEventListener("input", () => {
+        cfg[f.key] = inp.value;
+        saveSettings();
+      });
+      ctl = inp;
+    }
+    const fl = field(f.label, ctl);
+    if (f.hint) {
+      const hint = document.createElement("small");
+      hint.className = "tts-hint";
+      hint.textContent = f.hint;
+      fl.append(hint);
+    }
+    pop.append(fl);
+  }
+
+  // ---- Ortak: hız, otomatik okuma, deneme
   const rate = document.createElement("input");
   rate.type = "range";
   rate.dataset.k = "rate";
@@ -684,37 +896,37 @@ function fillPop(): void {
     settings.auto = autoBox.checked;
     saveSettings();
   });
-
-  const field = (label: string, ...ctl: HTMLElement[]) => {
-    const l = document.createElement("label");
-    l.className = "tts-field";
-    const s = document.createElement("span");
-    s.textContent = label;
-    const r = document.createElement("div");
-    r.className = "tts-ctl";
-    r.append(...ctl);
-    l.append(s, r);
-    return l;
-  };
   const autoLbl = document.createElement("label");
   autoLbl.className = "tts-check";
   autoLbl.append(autoBox, " Yanıt bitince otomatik oku");
 
-  pop.append(head, field("Ses", sel), field("Hız", rate, rv), autoLbl);
+  const test = document.createElement("button");
+  test.type = "button";
+  test.className = "tts-test";
+  test.dataset.k = "test";
+  test.textContent = "Sesi dene";
+  const ca = availOf(cur);
+  test.disabled = !ca.ok;
+  test.title = ca.ok ? "Seçili seslendirici kısa bir örnek cümle okur" : "Bu seslendirici şu anda kullanılamıyor";
+  test.addEventListener("click", speakSample);
 
-  if (speaker.voicesReady() && !hasTurkish()) {
-    const n = document.createElement("p");
-    n.className = "tts-help";
-    n.textContent = "Bu bilgisayarda Türkçe ses yüklü değil, bu yüzden formüller ve Türkçe sözcükler yabancı aksanla okunur. "
-      + "Windows Ayarları'nın dil (ya da konuşma) bölümünden Türkçe dil paketini konuşma özelliğiyle birlikte ekleyip uygulamayı "
-      + "yeniden başlatırsan Türkçe ses burada görünür. O zamana kadar listedeki bir sesle okunur.";
-    pop.append(n);
+  pop.append(field("Hız", rate, rv), autoLbl, test);
+
+  for (const n of cur.notes?.() ?? []) {
+    const p = document.createElement("p");
+    p.className = "tts-help" + (n.warn ? "" : " dim");
+    p.textContent = n.text;
+    pop.append(p);
   }
   const k = document.createElement("p");
   k.className = "tts-help dim";
   k.textContent = "Kısayol: Alt+S son yanıtı okur ya da okumayı durdurur.";
   pop.append(k);
-  pop.style.bottom = host.compose.offsetHeight + (bar.hidden ? 0 : bar.offsetHeight) + 6 + "px";
+  const bottom = host.compose.offsetHeight + (bar.hidden ? 0 : bar.offsetHeight) + 6;
+  pop.style.bottom = bottom + "px";
+  // Küçük (cam) pencerede kutu panelin dışına taşmasın; içeriği kayar
+  pop.style.maxHeight = Math.max(160, host.panel.clientHeight - bottom - 8) + "px";
+  pop.scrollTop = top;
   if (hadFocus) (pop.querySelector(`[data-k="${hadFocus}"]`) as HTMLElement | null)?.focus();
 }
 
@@ -743,25 +955,33 @@ function onKey(e: KeyboardEvent): void {
 
 // ================================================================ Bağlama
 
-/** Panel kurulunca bir kez çağrılır. Seslendirme desteklenmiyorsa hiçbir denetim eklenmez. */
+/** Panel kurulunca bir kez çağrılır. */
 export function initTts(h: Host, custom?: Speaker): void {
-  speaker = custom ?? new WebSpeechSpeaker();
-  if (!speaker.available()) return;
+  if (custom) system = custom;
+  speaker = sys();
   host = h;
   h.panel.insertBefore(buildBar(), h.compose);
-  speaker.onVoicesChanged(() => sync());
+  sys().onVoicesChanged(() => sync());
   window.addEventListener("keydown", onKey, true);
   // Okunan yanıt silinince, sekme/konuşma değişince ya da panel kapanınca dur
   new MutationObserver(() => {
     if (state === "idle" || !turn) return;
-    if (h.panel.hidden || !turn.el.isConnected || !h.main.contains(turn.el)) stop();
+    if (h.panel.hidden || (!turn.sample && (!turn.el.isConnected || !h.main.contains(turn.el)))) stop();
   }).observe(h.panel, { subtree: true, childList: true, attributes: true, attributeFilter: ["hidden"] });
   window.addEventListener("pagehide", () => stop());
 }
 
+/** Hiçbir motor kullanılamıyorsa (ör. sistem sesi yok, bulut ayarı yok) denetimler eklenmez; eskisi gibi. */
+function anyUsable(): boolean {
+  return listEngines().some((e) => {
+    const a = e.available();
+    return a instanceof Promise || a.ok;
+  });
+}
+
 /** Tamamlanan her yanıtın araç çubuğuna oku/durdur düğmelerini ekler; açıksa otomatik okumayı başlatır. */
 export function ttsAttach(tools: HTMLElement, t: TtsTurn): void {
-  if (!host || !speaker.available() || !t.text.trim()) return;
+  if (!host || !t.text.trim() || !anyUsable()) return;
   const play_ = btn("Sesli oku (Alt+S)", ICONS.speak, () => toggleTurn(t));
   const stop_ = btn("Okumayı durdur", ICONS.stop, () => stop());
   stop_.hidden = true;

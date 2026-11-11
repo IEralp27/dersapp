@@ -91,3 +91,49 @@
 #ai-panel.ai-float .tts-bar { background: rgb(12 14 18 / 0.6); border-top-color: #ffffff1f; }
 #ai-panel.ai-float .tts-pop { background: rgb(28 32 39 / 0.94); border-color: #ffffff24; }
 #ai-panel.ai-float .tts-rate, #ai-panel.ai-float .tts-ctl select { background: rgb(12 14 18 / 0.72); }
+
+/* Seslendirici seçimi ve motor alanları */
+.tts-pop { max-height: 70%; overflow-y: auto; overscroll-behavior: contain; }
+.tts-pop > * { flex: none; }
+.tts-sec { color: var(--dim); font-size: 11.5px; margin-bottom: -4px; }
+.tts-engines { display: flex; flex-direction: column; gap: 4px; }
+.tts-eng {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  cursor: pointer;
+}
+.tts-eng:has(input:checked) { border-color: var(--accent); }
+.tts-eng input { margin: 3px 0 0; accent-color: var(--accent); flex: none; }
+.tts-eng > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tts-eng b { font-weight: 600; }
+.tts-eng small { color: var(--dim); font-size: 11.5px; line-height: 1.4; }
+.tts-eng small.tts-why { color: #f0c674; }
+.tts-eng.tts-off { cursor: default; }
+.tts-eng.tts-off b { color: var(--dim); }
+.tts-ctl input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--fg);
+}
+.tts-hint { color: var(--dim); font-size: 11px; line-height: 1.35; }
+.tts-test {
+  align-self: flex-start;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--fg);
+  cursor: pointer;
+}
+.tts-test:hover:not(:disabled) { background: var(--hover); }
+.tts-test:disabled { opacity: 0.5; cursor: default; }
+#ai-panel.ai-float .tts-eng, #ai-panel.ai-float .tts-test, #ai-panel.ai-float .tts-ctl input[type="text"] { background: rgb(12 14 18 / 0.72); }
