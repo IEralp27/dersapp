@@ -1,0 +1,196 @@
+{
+  "_nasil_duzenlenir": "Bu dosya derleme sırasında sunucuya gömülür (include_str!). Araç eklemek/değiştirmek için buraya yaz, sonra 'cargo build --release' ile yeniden derle. Her araç: name, title, description, inputSchema (JSON Schema, type=object), isteğe bağlı annotations ve timeoutSec (saniye, varsayılan 60; istemciye gönderilmez). '_' ile başlayan alanlar yorumdur, istemciye gönderilmez. Aracın asıl işini DersApp yapar; 'dersapp_status' dışındaki her çağrı uygulamaya iletilir.",
+  "tools": [
+    {
+      "name": "dersapp_status",
+      "title": "DersApp durumu",
+      "description": "DersApp açık mı, veri klasörü nerede ve uygulamanın son bildirdiği durum (açık belgeler vb.). Bağlantı sorunu varsa ya da başka bir araç 'DersApp açık değil' hatası verirse önce bunu çağır. / Reports whether the DersApp desktop app is running, its data folder and a summary of its last reported state. Call this first when another tool fails or to check the connection.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "annotations": { "readOnlyHint": true, "openWorldHint": false }
+    },
+    {
+      "name": "list_documents",
+      "title": "Açık PDF'leri listele",
+      "description": "Öğrencinin DersApp'te açık olan PDF sekmelerini, etkin sekmeyi ve o an bulunduğu sayfayı listeler. Öğrenci 'bu sayfa', 'bu konu', 'şu PDF' dediğinde ya da hangi belgeyle çalıştığını bilmen gerektiğinde ilk olarak bunu çağır; diğer araçların 'document' değeri buradan gelir. / Lists the PDF tabs open in DersApp, which one is active and the current page. Call this first whenever you need to know what the student is studying; other tools take the 'document' value from here.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "annotations": { "readOnlyHint": true, "openWorldHint": false }
+    },
+    {
+      "name": "read_page",
+      "title": "Sayfayı oku",
+      "description": "Bir PDF sayfasının metnini ve/veya görüntüsünü döndürür. Varsayılan: etkin belge, öğrencinin bulunduğu sayfa, metin + görüntü. Formül, şekil, tablo ya da devre şeması olan sayfalarda görüntü ('image' ya da 'both') iste; yalnızca düz metin yetiyorsa 'text' daha hızlıdır. / Returns the text and/or a rendered image of one PDF page (default: active document, current page, both). Ask for the image when the page has formulas, figures, tables or diagrams.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "type": "string",
+            "description": "Belge kimliği ya da adı (list_documents'tan). Boş bırakılırsa etkin belge. / Document id or name from list_documents; defaults to the active one."
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1'den başlayan sayfa numarası. Boşsa öğrencinin bulunduğu sayfa. / 1-based page number; defaults to the current page."
+          },
+          "format": {
+            "type": "string",
+            "enum": ["text", "image", "both"],
+            "default": "both",
+            "description": "text: yalnız metin, image: yalnız görüntü, both: ikisi. / What to return."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": { "readOnlyHint": true, "openWorldHint": false },
+      "timeoutSec": 90
+    },
+    {
+      "name": "read_pages_text",
+      "title": "Sayfa aralığının metnini oku",
+      "description": "Bir PDF'in from..to sayfa aralığının (ikisi dahil, en çok 30 sayfa) yalnızca metnini döndürür. Bir bölümü özetlemek, konu çıkarmak ya da test hazırlamak için birden çok sayfa gerektiğinde kullan; tek sayfa ve şekiller için read_page daha uygundur. / Returns the plain text of pages from..to (inclusive, at most 30 pages). Use for summarising a chapter or preparing a test from several pages.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "type": "string",
+            "description": "Belge kimliği ya da adı (list_documents'tan). Boşsa etkin belge. / Document id or name; defaults to the active one."
+          },
+          "from": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "İlk sayfa (1'den başlar). / First page, 1-based."
+          },
+          "to": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Son sayfa (dahil). to - from + 1 en çok 30 olabilir. / Last page, inclusive; at most 30 pages in total."
+          }
+        },
+        "required": ["from", "to"],
+        "additionalProperties": false
+      },
+      "annotations": { "readOnlyHint": true, "openWorldHint": false },
+      "timeoutSec": 120
+    },
+    {
+      "name": "go_to_page",
+      "title": "Sayfaya git",
+      "description": "DersApp'te bir PDF'i belirtilen sayfaya kaydırır (gerekirse o sekmeyi etkinleştirir). Öğrenciye bir şeyi kitapta göstermek istediğinde kullan. / Scrolls a PDF in DersApp to the given page (activating its tab if needed). Use it to show the student something in the book.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "type": "string",
+            "description": "Belge kimliği ya da adı (list_documents'tan). Boşsa etkin belge. / Document id or name; defaults to the active one."
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Gidilecek sayfa (1'den başlar). / Target page, 1-based."
+          }
+        },
+        "required": ["page"],
+        "additionalProperties": false
+      },
+      "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false }
+    },
+    {
+      "name": "show_test",
+      "title": "Test göster",
+      "description": "Öğrenciye DersApp içinde etkileşimli bir test (quiz) gösterir. Öğrenci 'beni test et', 'soru sor', 'quiz hazırla' dediğinde, soruları sohbete yazmak yerine bunu kullan. Araç test ekrana gelince hemen döner; öğrencinin cevaplarını ve puanını daha sonra get_test_results ile al. / Shows an interactive quiz to the student inside DersApp. Prefer this over writing questions in the chat. Returns as soon as the test is displayed; fetch answers later with get_test_results.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Testin başlığı, ör. 'Rulmanlar - 5 soru'. / Quiz title."
+          },
+          "questions": {
+            "type": "array",
+            "minItems": 1,
+            "description": "Sorular. / The questions.",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "required": ["title", "questions"],
+        "additionalProperties": false
+      },
+      "annotations": { "readOnlyHint": false, "destructiveHint": false, "openWorldHint": false }
+    },
+    {
+      "name": "get_test_results",
+      "title": "Test sonuçlarını al",
+      "description": "Öğrencinin DersApp'te son çözdüğü testlerin sonuçlarını (sorular, verdiği cevaplar, doğru/yanlış, puan) en yeniden eskiye döndürür. show_test'ten sonra ya da öğrencinin zayıf olduğu konuları bulmak için kullan. / Returns the results of the most recently solved quizzes, newest first (answers, correctness, score).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 5,
+            "description": "En çok kaç test sonucu dönsün (varsayılan 5). / Maximum number of results (default 5)."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": { "readOnlyHint": true, "openWorldHint": false }
+    },
+    {
+      "name": "list_exams",
+      "title": "Sınavları listele",
+      "description": "DersApp'in sınav takvimindeki sınavları (ders, tarih, saat, yer, not) listeler. Çalışma planı yaparken ya da öğrenci 'sınavım ne zaman' dediğinde kullan. / Lists the exams in DersApp's exam calendar (course, date, time, place, note).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "annotations": { "readOnlyHint": true, "openWorldHint": false }
+    },
+    {
+      "name": "add_exam",
+      "title": "Sınav ekle",
+      "description": "DersApp'in sınav takvimine yeni bir sınav ekler. Yalnızca öğrenci açıkça bir sınav tarihi verdiğinde ya da eklemeni istediğinde kullan. / Adds an exam to DersApp's exam calendar. Only use when the student gives an exam date or asks you to add one.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "course": {
+            "type": "string",
+            "description": "Ders adı, ör. 'Süreç Kontrol'. / Course name."
+          },
+          "date": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "description": "Tarih, YYYY-AA-GG biçiminde, ör. 2026-11-20. / Date as YYYY-MM-DD."
+          },
+          "time": {
+            "type": "string",
+            "pattern": "^[0-9]{2}:[0-9]{2}$",
+            "description": "Saat, SS:DD (24 saat), ör. 09:30. / Time as HH:MM (24h)."
+          },
+          "place": {
+            "type": "string",
+            "description": "Yer / salon. / Room or place."
+          },
+          "note": {
+            "type": "string",
+            "description": "Not, ör. 'vize', 'konular 1-4. bölüm'. / Free-form note."
+          }
+        },
+        "required": ["course", "date"],
+        "additionalProperties": false
+      },
+      "annotations": { "readOnlyHint": false, "destructiveHint": false, "openWorldHint": false }
+    }
+  ]
+}
