@@ -16,6 +16,11 @@ async fn read_pdf(path: String) -> Result<Response, String> {
 }
 
 #[tauri::command]
+async fn write_pdf(path: String, data: Vec<u8>) -> Result<(), String> {
+    store::write_pdf(&path, &data)
+}
+
+#[tauri::command]
 async fn list_dir(path: String) -> Result<store::Listing, String> {
     store::list_dir(&path)
 }
@@ -45,7 +50,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
-            read_pdf, list_dir, load_state, save_state, load_notes, save_notes
+            read_pdf, write_pdf, list_dir, load_state, save_state, load_notes, save_notes
         ])
         .run(tauri::generate_context!())
         .expect("uygulama başlatılamadı");

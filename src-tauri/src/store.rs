@@ -41,6 +41,23 @@ pub fn read_pdf(path: &str) -> Result<Vec<u8>, String> {
     fs::read(p).map_err(|e| format!("Dosya okunamadı: {e}"))
 }
 
+/// Uygulamanın ürettiği PDF'i (test, özet) kullanıcının seçtiği yere yazar.
+pub fn write_pdf(path: &str, data: &[u8]) -> Result<(), String> {
+    let p = Path::new(path);
+    if !is_pdf(p) {
+        return Err("Dosya adı .pdf ile bitmeli.".into());
+    }
+    if !data.starts_with(b"%PDF") {
+        return Err("Kaydedilecek veri geçerli bir PDF değil.".into());
+    }
+    if let Some(parent) = p.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).map_err(|e| format!("Klasör oluşturulamadı: {e}"))?;
+        }
+    }
+    fs::write(p, data).map_err(|e| format!("Dosya yazılamadı: {e}"))
+}
+
 /// Klasördeki alt klasörleri ve PDF'leri döndürür (klasörler önce, ada göre sıralı).
 pub fn list_dir(path: &str) -> Result<Listing, String> {
     let dir = Path::new(path);
@@ -151,6 +168,16 @@ mod tests {
         assert!(read_pdf(d.join("a.txt").to_str().unwrap()).is_err());
         assert_eq!(read_pdf(d.join("a.pdf").to_str().unwrap()).unwrap(), b"%PDF");
         assert!(read_pdf(d.join("yok.pdf").to_str().unwrap()).is_err());
+    }
+
+    #[test]
+    fn write_pdf_checks_name_and_content() {
+        let d = tmp("write");
+        let f = d.join("alt").join("test.pdf");
+        assert!(write_pdf(f.to_str().unwrap(), b"merhaba").is_err());
+        assert!(write_pdf(d.join("a.txt").to_str().unwrap(), b"%PDF-1.7").is_err());
+        write_pdf(f.to_str().unwrap(), b"%PDF-1.7 x").unwrap();
+        assert_eq!(read_pdf(f.to_str().unwrap()).unwrap(), b"%PDF-1.7 x");
     }
 
     #[test]

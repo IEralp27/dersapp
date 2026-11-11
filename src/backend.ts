@@ -76,6 +76,33 @@ export async function readPdf(path: string): Promise<Uint8Array> {
   return new Uint8Array(await res.arrayBuffer());
 }
 
+/**
+ * Uygulamanın ürettiği PDF'i kaydeder: kullanıcıya yer sorar, yazar ve
+ * sekme olarak açılabilecek kaynağı döndürür. Vazgeçilirse null.
+ * (Tarayıcıda dosya indirilir ve kaynak bellekten açılır.)
+ */
+export async function savePdfAs(defaultName: string, data: Uint8Array): Promise<PdfSource | null> {
+  if (!/\.pdf$/i.test(defaultName)) defaultName += ".pdf";
+  if (!inTauri) {
+    const url = URL.createObjectURL(new Blob([data.slice()], { type: "application/pdf" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = defaultName;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    return { path: "mem:" + defaultName, name: defaultName, data };
+  }
+  const { save } = await import("@tauri-apps/plugin-dialog");
+  const path = await save({
+    title: "PDF'i kaydet",
+    defaultPath: defaultName,
+    filters: [{ name: "PDF", extensions: ["pdf"] }],
+  });
+  if (!path) return null;
+  await invoke("write_pdf", { path, data: Array.from(data) });
+  return { path, name: baseName(path) };
+}
+
 export async function listDir(path: string): Promise<Listing> {
   if (inTauri) return invoke<Listing>("list_dir", { path });
   return { path, parent: null, entries: [] };

@@ -632,6 +632,9 @@ async function init(): Promise<void> {
     for (const t of tabs) if (noteTimers.has(t.path)) saveNotesSoon(t, true);
   });
   await backend.onFilesDropped(openSources);
+  // Başka bölümler (ör. üretilen test PDF'i) sekme açtırabilsin:
+  // document.dispatchEvent(new CustomEvent("dersapp:open", { detail: PdfSource }))
+  document.addEventListener("dersapp:open", (e) => openSources([(e as CustomEvent<PdfSource>).detail]));
 
   if (saved.dir ?? saved.folder) {
     backend.listDir((saved.dir ?? saved.folder)!).then((l) => {
