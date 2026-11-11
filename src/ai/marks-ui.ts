@@ -520,6 +520,22 @@ export function attachMarks(path: string, turn: HTMLElement, body: HTMLElement, 
   addGroup(path, region, marks, turn, body);
 }
 
+/**
+ * Dışarıdan (ders modunda sesli okuma) bir yanıtın n numaralı işaretini vurgular; null: vurguyu kaldırır.
+ * İşaret ekranda değilse oraya kaydırır. Yanıtın işareti yoksa bir şey yapmaz.
+ */
+export function hotStep(path: string, turn: HTMLElement, n: number | null): void {
+  const g = stateOf(path).groups.find((x) => x.turn === turn);
+  if (!g) return;
+  for (const x of turn.querySelectorAll(".ai-step-hot")) x.classList.remove("ai-step-hot");
+  if (!n || !g.marks.some((m) => m.n === n)) return setHot(g, null);
+  focusGroup(g);
+  setHot(g, n);
+  for (const s of turn.querySelectorAll(`.ai-step[data-n="${n}"], .ai-step-li[data-n="${n}"]`)) s.classList.add("ai-step-hot");
+  const view = PdfView.byPath(g.path);
+  if (view && view.current === layerOf(g.path, g.board)) layerOf(g.path, g.board)?.ai.reveal(g.id, n);
+}
+
 /** Konuşma temizlenince (Yeni konuşma) işaretler de silinir. */
 export function clearMarks(path: string): void {
   const st = docs.get(path);

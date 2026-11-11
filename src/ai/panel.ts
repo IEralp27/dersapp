@@ -9,6 +9,9 @@ import { initFloat } from "./float";
 import { initTts, ttsAttach } from "./tts";
 import { renderMarkdown } from "./markdown";
 import { initStudy, studyRow } from "./quiz-view";
+import {
+  initLesson, lessonChip, lessonCompose, lessonInput, lessonInterrupt, lessonPlaceholder, lessonSync, lessonTakesInput,
+} from "./lesson-ui";
 import { ACTION_PROMPTS, FREE_QUESTION_HINT, SYSTEM_PROMPT, contextLine } from "./prompts";
 import type { ActionId } from "./prompts";
 import {
@@ -254,6 +257,7 @@ async function ask(c: Conv, q: AskInput): Promise<void> {
   }
   const presetId = settings.preset;
   const config = currentConfig(settings);
+  lessonInterrupt(q.label.split(" · ")[0]); // ders sürüyorsa duraklar (lesson-ui.ts)
 
   const user: Turn = {
     role: "user", text: q.text,
@@ -392,6 +396,13 @@ function sendTyped(): void {
   const c = activeConv();
   const q = input.value.trim();
   if (!c || !q || c.busy) return;
+  if (lessonTakesInput(c.path)) {
+    // Ders kontrol sorusunun cevabı ya da ara soru (lesson-ui.ts)
+    input.value = "";
+    autosize();
+    lessonInput(q);
+    return;
+  }
   const att = c.pending;
   const cur = host.current()!;
   input.value = "";
@@ -448,6 +459,7 @@ function render(): void {
   modelLabel.title = modelLabel.textContent;
   toggleBtn.classList.toggle("on", ui.open);
   panel.hidden = !ui.open;
+  lessonSync(cur?.path ?? null, ui.open && !settingsOpen); // sekme/panel değişince ders duraklar
   if (!ui.open) return;
   floatCtl?.refit();
 
@@ -469,11 +481,11 @@ function render(): void {
     if (shown !== c || !mainEl.contains(c.thread)) {
       shown = c;
       mainEl.replaceChildren(c.thread);
-      if (!c.turns.length) mainEl.append(emptyView(
+      if (!c.turns.length && !c.thread.childElementCount) mainEl.append(emptyView(
         "PDF'te anlamadığın bir yeri soldaki ekran görüntüsü aracıyla (C) çerçevele, sonra \"Anlat\"a bas. "
         + "Bölge seçmeden aşağıdaki düğmelerle sayfanın tamamını da gönderebilirsin."));
       scrollDown();
-    } else if (c.turns.length) {
+    } else if (c.turns.length || c.thread.childElementCount) {
       mainEl.querySelector(".ai-empty")?.remove();
     }
   }
@@ -491,6 +503,9 @@ function renderCompose(c: Conv | null): void {
   composeEl.replaceChildren();
   const busy = !!c?.busy;
   const noDoc = !c;
+
+  const lesson = lessonCompose(c?.path ?? null, busy); // ders formu / devam önerisi / denetim çubuğu
+  if (lesson) composeEl.append(lesson);
 
   if (c?.pending) {
     const att = c.pending;
@@ -526,6 +541,7 @@ function renderCompose(c: Conv | null): void {
       b.disabled = busy || noDoc;
       row.append(b);
     }
+    row.append(lessonChip(c?.path ?? null, busy));
     composeEl.append(row);
   }
 
@@ -533,9 +549,9 @@ function renderCompose(c: Conv | null): void {
 
   const bar = el("div", "ai-input");
   input.disabled = noDoc;
-  input.placeholder = c?.pending
+  input.placeholder = (c && lessonPlaceholder(c.path)) || (c?.pending
     ? "Bu bölgeyle ilgili sorunu yaz…"
-    : c?.turns.length ? "Takip sorusu sor ya da cevabını yaz…" : "Bir soru yaz…";
+    : c?.turns.length ? "Takip sorusu sor ya da cevabını yaz…" : "Bir soru yaz…");
   if (busy) {
     sendBtn.innerHTML = svg(ICONS.stop);
     sendBtn.title = "Durdur";
@@ -917,6 +933,20 @@ export function initAi(h: AiHost): void {
   initStudy({
     current: () => host.current(), toast: (t, k) => host.toast(t, k), panel, settings: () => settings,
     pending: () => activeConv()?.pending ?? null, openSettings, followUp,
+    beforeJob: (what) => lessonInterrupt(what),
+  });
+  initLesson({
+    current: () => host.current(), settings: () => settings, toast: (t, k) => host.toast(t, k),
+    thread: (path, name) => convFor(path, name).thread,
+    scroll: (force) => {
+      if (shown && (force || nearBottom())) scrollDown();
+    },
+    busy: (path) => !!convs.get(path)?.busy,
+    setBusy: (path, ctrl) => {
+      const c = convs.get(path);
+      if (c) c.busy = ctrl;
+    },
+    render, toImage: (cv) => toImage(cv), openSettings, panelOpen: () => ui.open && !panel.hidden,
   });
   // Sekme değişince (etkin sekme sınıfı değişir) panel o sekmenin konuşmasını göstersin
   new MutationObserver(() => render()).observe(document.getElementById("tabs")!, {

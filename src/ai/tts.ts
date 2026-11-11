@@ -256,6 +256,8 @@ let errors = 0;
 let stale = false;
 let warnedNoTr = false;
 const controls = new WeakMap<HTMLElement, { play: HTMLButtonElement; stop: HTMLButtonElement }>();
+/** Dış denetleyicinin (ders modu) okuma kancaları; yalnızca ttsPlay ile başlatılan okumada dolu */
+let hooks: PlayHooks | null = null;
 const turns = new WeakMap<HTMLElement, TtsTurn>();
 
 let bar: HTMLElement;
@@ -518,6 +520,7 @@ function speakCurrent(): void {
   const s = segs[idx];
   if (!s) return finish();
   highlight(idx);
+  hooks?.onSegment?.(idx, s);
   const v = speaker === system ? pickVoice(lang) : { id: null, lang: lang === "tr" ? "tr-TR" : "en-US" };
   const mine = turn;
   const sp = speaker;
@@ -574,11 +577,17 @@ function speakCurrent(): void {
 }
 
 function finish(): void {
+  const h = hooks;
+  hooks = null;
   stop();
+  h?.onEnd?.();
 }
 
 /** Durdurur; okunan yanıt bırakılır. */
 export function stop(quiet = false): void {
+  const h = hooks;
+  hooks = null;
+  if (h && state !== "idle") h.onStop?.();
   if (state !== "idle") speaker?.stop();
   state = "idle";
   const old = turn;
@@ -979,8 +988,45 @@ function anyUsable(): boolean {
   });
 }
 
+// ================================================================ Dış denetleyiciler (ders modu)
+
+/** ttsPlay kancaları: okunan cümle değişince, okuma kendiliğinden bitince ve dışarıdan durdurulunca */
+export interface PlayHooks {
+  onSegment?(i: number, seg: Segment): void;
+  onEnd?(): void;
+  /** Kullanıcı ya da panel (kapanma, yanıt silinmesi) okumayı yarıda kesti */
+  onStop?(): void;
+}
+
+/** Sesli okuma kullanılabilir mi (en az bir motor) */
+export function ttsUsable(): boolean {
+  return !!host && anyUsable();
+}
+
+/** Bir yanıtı kancalarla okur (from: başlanacak cümle). Okuma başlayamadıysa false. */
+export function ttsPlay(t: TtsTurn, h: PlayHooks, from = 0): boolean {
+  play(t, from);
+  if (turn !== t || state === "idle") return false;
+  hooks = h;
+  h.onSegment?.(idx, segs[idx]);
+  return true;
+}
+
+/** Okunan yanıt bu mu ve ne durumda */
+export function ttsStateOf(t: TtsTurn): State | "other" {
+  return turn === t ? state : state === "idle" ? "idle" : "other";
+}
+
+export function ttsPause(): void {
+  pause();
+}
+
+export function ttsResume(): void {
+  resume();
+}
+
 /** Tamamlanan her yanıtın araç çubuğuna oku/durdur düğmelerini ekler; açıksa otomatik okumayı başlatır. */
-export function ttsAttach(tools: HTMLElement, t: TtsTurn): void {
+export function ttsAttach(tools: HTMLElement, t: TtsTurn, auto = true): void {
   if (!host || !t.text.trim() || !anyUsable()) return;
   const play_ = btn("Sesli oku (Alt+S)", ICONS.speak, () => toggleTurn(t));
   const stop_ = btn("Okumayı durdur", ICONS.stop, () => stop());
@@ -992,5 +1038,5 @@ export function ttsAttach(tools: HTMLElement, t: TtsTurn): void {
   turns.set(t.el, t);
   // Durdurulmuş (yarım) yanıtlar otomatik okunmaz
   const stopped = !!t.el.querySelector(":scope > .ai-note");
-  if (settings.auto && !stopped && !host.panel.hidden && t.el.isConnected) play(t);
+  if (auto && settings.auto && !stopped && !host.panel.hidden && t.el.isConnected) play(t);
 }
