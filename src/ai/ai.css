@@ -349,3 +349,81 @@ button.icon.mini svg { width: 13px !important; height: 13px !important; }
 .ai-status.ok { color: #46c46b; }
 .ai-status.bad { color: var(--danger); }
 .ai-form-actions { display: flex; gap: 8px; margin-top: 4px; }
+
+/* ---------------------------------------------------------------- Pencere kipi (buzlu cam) */
+body.ai-win-busy { user-select: none; }
+body.ai-win-busy .view { pointer-events: none; }
+
+#ai-panel.ai-float {
+  --ai-alpha: 0.72;
+  position: fixed;
+  z-index: 25;
+  max-width: none;
+  min-width: 0;
+  flex: none;
+  border: 1px solid #ffffff2e;
+  border-radius: 12px;
+  background: rgb(22 24 29 / var(--ai-alpha));
+  -webkit-backdrop-filter: blur(9px) saturate(1.25);
+  backdrop-filter: blur(9px) saturate(1.25);
+  box-shadow: 0 12px 40px #0009, 0 2px 8px #0006, inset 0 1px 0 #ffffff14;
+  overflow: hidden;
+}
+#ai-panel.ai-float .ai-resize { display: none; }
+#ai-panel.ai-float .ai-head {
+  cursor: move;
+  user-select: none;
+  border-bottom-color: #ffffff1f;
+  background: #ffffff0a;
+}
+#ai-panel.ai-float .ai-head button { cursor: pointer; }
+#ai-panel.ai-float .ai-compose { border-top-color: #ffffff1f; }
+
+/* Cam üstünde okunurluk: metin ve girdi alanlarına ayrı, daha opak zemin */
+#ai-panel.ai-float .ai-assistant {
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgb(16 18 23 / 0.5);
+  border: 1px solid #ffffff12;
+}
+#ai-panel.ai-float .ai-user-text { background: rgb(52 60 72 / 0.85); }
+#ai-panel.ai-float .ai-md code,
+#ai-panel.ai-float .ai-md pre,
+#ai-panel.ai-float .ai-attach,
+#ai-panel.ai-float .ai-input,
+#ai-panel.ai-float .ai-chip,
+#ai-panel.ai-float .ai-settings input,
+#ai-panel.ai-float .ai-settings select { background: rgb(12 14 18 / 0.72); }
+#ai-panel.ai-float .ai-settings,
+#ai-panel.ai-float .ai-setup,
+#ai-panel.ai-float .ai-empty {
+  padding: 10px 12px 12px;
+  border-radius: 10px;
+  background: rgb(16 18 23 / 0.55);
+  border: 1px solid #ffffff12;
+}
+#ai-panel.ai-float .ai-dim, #ai-panel.ai-float .ai-hint, #ai-panel.ai-float .ai-model { color: #b4bdc9; }
+
+/* Boyutlandırma tutamaçları (yalnızca pencere kipinde) */
+.ai-win-grip { display: none; position: absolute; z-index: 3; }
+#ai-panel.ai-float .ai-win-grip { display: block; }
+.ai-win-n, .ai-win-s { left: 10px; right: 10px; height: 6px; cursor: ns-resize; }
+.ai-win-e, .ai-win-w { top: 10px; bottom: 10px; width: 6px; cursor: ew-resize; }
+.ai-win-n { top: 0; } .ai-win-s { bottom: 0; }
+.ai-win-e { right: 0; } .ai-win-w { left: 0; }
+.ai-win-ne, .ai-win-nw, .ai-win-se, .ai-win-sw { width: 18px; height: 18px; }
+.ai-win-ne { top: 0; right: 0; cursor: nesw-resize; }
+.ai-win-nw { top: 0; left: 0; cursor: nwse-resize; }
+.ai-win-se { bottom: 0; right: 0; cursor: nwse-resize; }
+.ai-win-sw { bottom: 0; left: 0; cursor: nesw-resize; }
+.ai-win-se::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid #ffffff66;
+  border-bottom: 2px solid #ffffff66;
+  border-radius: 0 0 3px 0;
+}
