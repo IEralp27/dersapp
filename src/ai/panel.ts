@@ -910,7 +910,7 @@ export function initAi(h: AiHost): void {
   document.getElementById("topbar")!.append(toggleBtn);
 
   document.addEventListener("dersapp:snip", onSnip);
-  initMarks({ openPanel: () => toggleAi(true), appendNotice, toast: (t, k) => host.toast(t, k) });
+  initMarks({ openPanel: () => { if (!ui.open) toggleAi(true); }, appendNotice, toast: (t, k) => host.toast(t, k) });
   initStudy({
     current: () => host.current(), toast: (t, k) => host.toast(t, k), panel, settings: () => settings,
     pending: () => activeConv()?.pending ?? null, openSettings, followUp,
