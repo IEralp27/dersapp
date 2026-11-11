@@ -101,7 +101,7 @@ const q = (at: number, doc: string, topics: [string, number, number][]): Learner
 
 t("istatistik: az veri açıkça söylenir", () => {
   const s = buildStats([{ type: "tts", at: NOW }], NOW);
-  assert.match(s, /Henüz yeterli veri yok/);
+  assert.ok(/Henüz yeterli veri yok/.test(s));
   assert.ok(!s.includes("###"));
 });
 
@@ -120,18 +120,18 @@ t("istatistik: süre, belgeler, konular, eylemler, kontrol soruları", () => {
     { type: "tts", at: NOW },
   ];
   const s = buildStats(ev, NOW);
-  assert.match(s, /Toplam çalışma süresi: 1 sa 35 dk \(son 7 gün: 1 sa 5 dk\)/);
-  assert.match(s, /- Mekanik\.pdf: 1 sa 5 dk/);
+  assert.ok(/Toplam çalışma süresi: 1 sa 35 dk \(son 7 gün: 1 sa 5 dk\)/.test(s));
+  assert.ok(/- Mekanik\.pdf: 1 sa 5 dk/.test(s));
   assert.ok(s.indexOf("Mekanik.pdf: 1 sa 5 dk") < s.indexOf("Eski.pdf"));
-  assert.match(s, /\| Mil hesabı \| 4 \| %25 \| tekrar et \|/);
-  assert.match(s, /\| Dişli \| 5 \| %80 \| güçlü \|/);
-  assert.match(s, /\| Rulman \| 3 \| %67 \| orta \|/);
+  assert.ok(/\| Mil hesabı \| 4 \| %25 \| tekrar et \|/.test(s));
+  assert.ok(/\| Dişli \| 5 \| %80 \| güçlü \|/.test(s));
+  assert.ok(/\| Rulman \| 3 \| %67 \| orta \|/.test(s));
   assert.ok(!s.includes("Tek soru"), "3'ten az soru olan konu yok");
-  assert.match(s, /En çok kullanılan: Anlat \(2\)/);
-  assert.match(s, /İlk denemede doğru: 2\/3 \(%67\)/);
-  assert.match(s, /Sesli anlatım kullanılan yanıt: 1/);
+  assert.ok(/En çok kullanılan: Anlat \(2\)/.test(s));
+  assert.ok(/İlk denemede doğru: 2\/3 \(%67\)/.test(s));
+  assert.ok(/Sesli anlatım kullanılan yanıt: 1/.test(s));
   same(weakTopics(ev), ["Mil hesabı"]);
-  assert.match(weakHint(ev), /Mil hesabı/);
+  assert.ok(/Mil hesabı/.test(weakHint(ev)));
   assert.equal(weakHint([]), "");
 });
 
@@ -147,11 +147,11 @@ t("konu satırları olaylar arasında birleşir (büyük/küçük harf duyarsız
 t("istatistik: test yoksa ve konu verisi azsa yorum uydurmaz", () => {
   const ev: LearnerEvent[] = Array.from({ length: 6 }, (_, i) => ({ type: "action", at: NOW + i, action: "free", doc: "a", page: 1 }) as LearnerEvent);
   const s = buildStats(ev, NOW);
-  assert.match(s, /Henüz test çözülmedi/);
-  assert.match(s, /Henüz kontrol sorusu cevaplanmadı/);
+  assert.ok(/Henüz test çözülmedi/.test(s));
+  assert.ok(/Henüz kontrol sorusu cevaplanmadı/.test(s));
   assert.ok(!s.includes("tekrar et"));
   const s2 = buildStats([...ev, q(NOW, "a", [["X", 1, 2]])], NOW);
-  assert.match(s2, /yeterli veri yok \(bir konuda en az 3 soru gerekir\)/);
+  assert.ok(/yeterli veri yok \(bir konuda en az 3 soru gerekir\)/.test(s2));
 });
 
 // ---- ogrenci.md
@@ -166,8 +166,8 @@ t("md: birleştir -> ayrıştır gidiş dönüş", () => {
   same(parseProfile(md), P);
   assert.equal(composeProfile(parseProfile(md)), md);
   same(parseProfile(composeProfile(emptyProfile())), emptyProfile());
-  assert.match(md, /^# Öğrenci profili/);
-  assert.match(md, /## Benim notlarım[\s\S]*## Öğretmen notu[\s\S]*## İstatistikler/);
+  assert.ok(/^# Öğrenci profili/.test(md));
+  assert.ok(/## Benim notlarım[\s\S]*## Öğretmen notu[\s\S]*## İstatistikler/.test(md));
 });
 
 t("md: boş ya da bozuk dosya", () => {
@@ -232,9 +232,9 @@ t("kişiselleştirme: kapalı ya da boşsa hiçbir şey eklenmez", () => {
 t("kişiselleştirme: etiketli bölüm, kural, istatistik yok", () => {
   const s = withPersonal("BASE", { ...P, stats: "GİZLİ-İSTATİSTİK" }, true);
   assert.ok(s.startsWith("BASE\n\n## Öğrencinin çalışma notu"));
-  assert.match(s, /nota açıkça atıf yapma ve öğrenciyi etiketleme/);
-  assert.match(s, /\[Öğrencinin kendi notları\]\nÖnce sezgi/);
-  assert.match(s, /\[Öğretmen notu\]\nÖğrenci dişli/);
+  assert.ok(/nota açıkça atıf yapma ve öğrenciyi etiketleme/.test(s));
+  assert.ok(/\[Öğrencinin kendi notları\]\nÖnce sezgi/.test(s));
+  assert.ok(/\[Öğretmen notu\]\nÖğrenci dişli/.test(s));
   assert.ok(!s.includes("GİZLİ-İSTATİSTİK"));
 });
 
