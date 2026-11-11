@@ -1,5 +1,6 @@
 // Uygulama kabuğu: sekmeler, dosyalar paneli, araç çubuğu, kısayollar.
 import * as backend from "./backend";
+import { initAi, toggleAi } from "./ai/panel";
 import type { Entry, Listing, PdfSource } from "./backend";
 import type { Tool } from "./draw";
 import { PdfError, PdfView } from "./viewer";
@@ -527,6 +528,7 @@ function onKey(e: KeyboardEvent): void {
       o: () => void openDialog(),
       w: () => active && closeTab(active),
       b: () => toggleSidebar(),
+      j: () => toggleAi(),
       tab: () => cycleTab(e.shiftKey ? -1 : 1),
       "+": () => zoomBy(1.15),
       "=": () => zoomBy(1.15),
@@ -556,6 +558,7 @@ function onKey(e: KeyboardEvent): void {
 
 async function init(): Promise<void> {
   buildTools();
+  initAi({ current: () => (active?.view ? { path: active.path, name: active.name, view: active.view } : null), toast });
 
   try {
     const text = await backend.loadState();

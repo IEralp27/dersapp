@@ -506,6 +506,24 @@ export class PdfView {
     if (kept.length !== shapes.length) this.notes.setLive(slot.num, kept);
   }
 
+  /** Bir sayfanın tamamını (çizimlerle) resim olarak verir; uzun kenarı en fazla maxSide piksel. */
+  async capturePage(num: number, maxSide = 1800): Promise<HTMLCanvasElement> {
+    const page = await this.doc.getPage(num);
+    const base = page.getViewport({ scale: 1 });
+    const k = Math.min(4, maxSide / Math.max(base.width, base.height));
+    const viewport = page.getViewport({ scale: k });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.floor(viewport.width);
+    canvas.height = Math.floor(viewport.height);
+    await page.render({ canvas, viewport }).promise;
+    const ctx = canvas.getContext("2d")!;
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+    const shapes = this.notes.get(num);
+    for (const s of shapes) if (s.t === "hl") drawShape(ctx, s);
+    for (const s of shapes) if (s.t !== "hl") drawShape(ctx, s);
+    return canvas;
+  }
+
   dispose(): void {
     this.disposed = true;
     this.io.disconnect();
