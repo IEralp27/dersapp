@@ -422,23 +422,25 @@ function notebookTab(): Tab {
 
 /**
  * "NotebookLM'e gönder": yükleme kullanıcıda kalır (Google sayfasına tıklama/betik yok).
- * PDF yolu panoya kopyalanır, NotebookLM sekmesi açılır, sonraki ses/video indirmesi bu PDF'e bağlanır.
+ * PDF yolu (ya da file verilirse o dosyanın, ör. NotebookLM metni .md) panoya kopyalanır, NotebookLM sekmesi açılır,
+ * sonraki ses/video indirmesi bu PDF'e bağlanır.
  */
-async function sendToNotebookLm(): Promise<void> {
+async function sendToNotebookLm(file?: { path: string; name: string }): Promise<void> {
   const pdf = active;
   if (!pdf?.view || pdf.data || pdf.path === BOARD_TAB) return toast("Önce diskteki bir PDF'i aç.", "info");
   mediaStore.markSent(pdf.path, pdf.name);
+  const src = file ?? { path: pdf.path, name: pdf.name };
   let copied = true;
   try {
-    await navigator.clipboard.writeText(pdf.path);
+    await navigator.clipboard.writeText(src.path);
   } catch {
     copied = false;
   }
   notebookTab();
-  webNote((copied ? `"${pdf.name}" dosyasının yolu panoya kopyalandı. ` : "")
+  webNote((copied ? `"${src.name}" dosyasının yolu panoya kopyalandı. ` : "")
     + "NotebookLM'de Kaynak ekle → Dosya yükle'ye bas, açılan pencerede dosya adı kutusuna Ctrl+V yapıştırıp Enter'a bas. "
     + "Sesli/Video özeti oluşturup indirince bu PDF'e bağlanır.", "info",
-  [{ label: "Klasörde göster", run: () => void web.revealFile(pdf.path).catch((e) => toast(message(e))) }], 0);
+  [{ label: "Klasörde göster", run: () => void web.revealFile(src.path).catch((e) => toast(message(e))) }], 0);
 }
 
 function onWebDownload(d: web.DownloadDone): void {
@@ -872,6 +874,7 @@ async function init(): Promise<void> {
   initMedia({
     current: () => (active?.view && !active.data && active.path !== BOARD_TAB ? { path: active.path, name: active.name } : null),
     toast,
+    sendToNotebook: (file) => void sendToNotebookLm(file), // NotebookLM metni (ai/nblm-ui.ts)
   });
   initWeb();
   initMcp({

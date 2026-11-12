@@ -38,3 +38,10 @@ Her satırı dene, olursa işaretle. Olmazsa hata metnini/ekran görüntüsünü
 - [ ] "Sil": kayıt listeden ve `%APPDATA%\...\dersler\` klasöründen kalkar.
 - [ ] Bulut sesiyle (OpenAI uyumlu) kısa bir kayıt: MP3 parçaları birleşir, ses ve vurgu uyumlu.
 - [ ] Talimat "10 dakikayı geçmesin" ile uzun aralık: kayıt süresi yaklaşık bu sınırda kalır.
+
+## NotebookLM için metin
+- [ ] Panelde "NotebookLM metni": form açılır; aralık değişince tahmin (sayfa, istek) güncellenir.
+- [ ] 5-8 sayfa, talimat "sınava yönelik": ilerleme bölümleri gösterir, "İptal" hemen durdurur; bitince "hazır" kartı çıkar.
+- [ ] Oluşan .md'yi aç: başlıklar düzenli, Türkçe harfler doğru, formüller düz metin ($ ve \frac yok), sonda "Kısa tekrar".
+- [ ] "NotebookLM'e gönder": NotebookLM açılır, Dosya yükle'de Ctrl+V .md yolunu yapıştırır, kaynak metin olarak eklenir.
+- [ ] Kulaklık listesinde "NotebookLM metinleri": Kaydet (kaydet penceresi), Klasörde göster ve Sil çalışır.

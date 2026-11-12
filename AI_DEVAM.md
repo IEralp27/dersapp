@@ -7,7 +7,7 @@ Ders çalışmaya odaklı masaüstü PDF okuyucu: "sohbet penceresi değil, PDF'
 - **Yığın:** Tauri 2 (Rust çekirdek) + Vite + sade TypeScript (framework yok). Arayüz web katmanında kalacak; kullanıcı Rust'ı seviyor ama saf Rust arayüze geçilmeyecek (karar verildi).
 - **Klasör:** `C:\Users\Eralp\Desktop\dev_app_learn\dersapp`
 - **Çalıştırma:** `npm install` → `npm run tauri dev`
-- **Testler:** `node src/<dosya>.test.ts` (Node 22, TS'i doğrudan çalıştırır). Hepsi geçiyordu: calc-engine, ai/quiz, quiz-store, marks, tts-text, tts-audio, tts-engine, tts-settings, lesson, notes, learner, cli-stream, web/web, recording. `npm run build` temiz.
+- **Testler:** `node src/<dosya>.test.ts` (Node 22, TS'i doğrudan çalıştırır). Hepsi geçiyordu: calc-engine, ai/quiz, quiz-store, marks, tts-text, tts-audio, tts-engine, tts-settings, lesson, notes, learner, cli-stream, web/web, recording, nblm. `npm run build` temiz.
 - Ayrıntılı dosya haritası ve kısayollar: `README.md`. MCP kurulumu: `docs/MCP.md`.
 
 ## Var olan özellikler
@@ -48,6 +48,11 @@ Kullanıcı hata çıktısı atarsa önce onu düzelt.
 - Ses: motorların yeni isteğe bağlı `clips()` alanı (Piper, bulut); parçalar 24 kHz mono tek WAV'da birleşir (WAV doğrudan okunur, MP3 `OfflineAudioContext` ile çözülür), zaman tablosu `spans`. Sistem sesi kayıt yapamaz (Türkçe uyarı).
 - Rust: `src-tauri/src/kayit.rs` (yalnızca 3 dosya adı + `[a-z0-9-]` kimlik; yazma ham istek gövdesiyle). Oynatıcı `recording-player.ts`, işaretler `showPlayerMarks` (marks-ui.ts). Kontrol listesi: `TEST_LISTESI.md`.
 - Bilinen: ses aşaması yarıda kalırsa ses baştan üretilir (metin korunur); 10 dk ≈ 29 MB WAV; Piper her parça için yeniden başlar (uzun kayıtta yavaş).
+
+## NotebookLM için metin (12 Kasım, `claude/nblm-metin` dalı, gerçek cihazda denenmedi)
+- Panelde "NotebookLM metni" çipi -> pencere (liste + aralık + talimat + tahmin). `NBLM_SYSTEM_PROMPT`/`nblmRequest` (prompts.ts), saf mantık `src/ai/nblm.ts` (LaTeX -> düz metin, birleştirme, dosya adı, localStorage bağı), arayüz `nblm-ui.ts`. Dilim/ilerleme/iptal/dosya yazma kayıtlı dersle ortak (`planChunks`, `progressView`, `writeFile`/`exportFile`).
+- Çıktı yalnızca `.md` (`dersler/<kimlik>/<ad>-sA-B-notebooklm.md`; kayit.rs artık `[a-z0-9-]{1,80}.md` adını da kabul eder, yeni `kayit_path` komutu). PDF yok: jsPDF'te Türkçe harfli gömülü yazı tipi yok (KaTeX yazı tiplerinde ş ğ ı İ yok).
+- `media-ui.ts` artık birden çok ek bölüm alır; `sendToNotebookLm(file?)` (main.ts) .md yolunu da kopyalar. Hata olursa yarım iş yalnızca bellekte (uygulama kapanırsa kaybolur).
 
 ## Bilinen eksikler / sıradaki fikirler
 - **Yeni ses motorları (kullanıcı istedi):** Google Cloud TTS, Azure (Microsoft) ve ElevenLabs için birer motor dosyası (`src/ai/tts-<ad>.ts`, `registerEngine` + `BytesSpeaker`; adımlar `tts.ts` başındaki yorumda). Her birinin kendi anahtar alanı ayarlarda olsun. Şu an ayarlardan yalnızca OpenAI uyumlu servisler ("Özel" sağlayıcı) eklenebiliyor. Güncel API biçimlerini resmi dokümandan doğrula.
