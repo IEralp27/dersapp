@@ -16,6 +16,9 @@
       <button id="btn-open" class="icon" title="PDF aç (Ctrl+O)" aria-label="PDF aç">
         <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
       </button>
+      <button id="btn-web" class="icon" title="Site aç (web sekmesi)" aria-label="Site aç">
+        <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" /></svg>
+      </button>
       <button id="btn-board" class="icon" title="Beyaz tahta / PDF (T)" aria-label="Beyaz tahta">
         <svg viewBox="0 0 24 24"><path d="M3 4h18v12H3zM12 16v4M8 21l4-1 4 1M7 9l3 3 5-5" /></svg>
       </button>
@@ -32,6 +35,27 @@
         </button>
         <button id="btn-fit" class="icon" title="Genişliğe sığdır" aria-label="Genişliğe sığdır">
           <svg viewBox="0 0 24 24"><path d="M4 5v14M20 5v14M8 12h8M8 12l3-3M8 12l3 3M16 12l-3-3M16 12l-3 3" /></svg>
+        </button>
+        <span class="sep"></span>
+        <button id="btn-nlm" title="Bu PDF'ten NotebookLM ile ses/video özeti hazırla">NotebookLM'e gönder</button>
+        <button id="btn-media" class="icon" title="Ses/Video özetleri" aria-label="Ses/Video özetleri">
+          <svg viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0116 0v2M4 14h3v6H4zM17 14h3v6h-3z" /></svg>
+          <span id="media-count" hidden></span>
+        </button>
+      </div>
+      <div id="web-controls" hidden>
+        <button id="btn-web-back" class="icon" title="Geri" aria-label="Geri">
+          <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" /></svg>
+        </button>
+        <button id="btn-web-forward" class="icon" title="İleri" aria-label="İleri">
+          <svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" /></svg>
+        </button>
+        <button id="btn-web-reload" class="icon" title="Yenile" aria-label="Yenile">
+          <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 11-2.3-5.7M20 4v5h-5" /></svg>
+        </button>
+        <input id="web-address" type="text" spellcheck="false" placeholder="Adres ya da arama (ör. notebooklm)" aria-label="Adres" />
+        <button id="btn-web-external" class="icon" title="Sistem tarayıcısında aç" aria-label="Sistem tarayıcısında aç">
+          <svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6" /></svg>
         </button>
       </div>
     </header>
@@ -64,7 +88,18 @@
           <p>Bir PDF aç ya da dosyayı bu pencereye sürükleyip bırak.</p>
           <button id="btn-welcome-open" class="primary">PDF aç</button>
           <button id="btn-welcome-board">Beyaz tahta</button>
+          <button id="btn-welcome-web">Site aç</button>
           <p class="hint">Ctrl+O ile de açabilirsin</p>
+        </div>
+        <div id="web-host" hidden>
+          <div id="web-note" hidden></div>
+          <div id="web-area">
+            <div id="web-start">
+              <p>Yukarıdaki adres kutusuna bir adres ya da aranacak bir şey yaz.</p>
+              <button id="btn-web-nlm" class="primary">NotebookLM'i aç</button>
+              <p class="hint">Girişler (Google hesabı) uygulama kapanıp açılınca da hatırlanır.</p>
+            </div>
+          </div>
         </div>
       </section>
 

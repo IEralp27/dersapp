@@ -9,6 +9,9 @@ import { initCalculator } from "./calc";
 import { initExams } from "./exams";
 import { initMcp } from "./mcp";
 import { initTextPlace } from "./text-place";
+import { NOTEBOOKLM_URL, hostLabel, isNotebookLm, normalizeInput } from "./web/url";
+import { initMedia, mediaStore, refreshMedia } from "./web/media-ui";
+import * as web from "./web/web-backend";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -23,6 +26,19 @@ interface Tab {
   loading: Promise<void> | null;
   failed: boolean;
   btn: HTMLElement;
+  /** Web sekmesi (yerel webview; src/web/) */
+  web?: WebState;
+}
+
+interface WebState {
+  /** Rust tarafındaki webview etiketi ("web-…") */
+  label: string;
+  /** Son bilinen adres ("" = henüz bir şey açılmadı) */
+  url: string;
+  /** Webview oluşturuldu mu */
+  opened: boolean;
+  /** NotebookLM sekmesi (giriş sayfasına yönlenince de "NotebookLM'e gönder" bunu bulsun) */
+  nlm?: boolean;
 }
 
 interface Saved {
@@ -57,6 +73,8 @@ function toast(text: string, kind: "error" | "info" = "error"): void {
   el.textContent = text;
   $("toasts").append(el);
   setTimeout(() => el.remove(), kind === "error" ? 6000 : 3000);
+  // Web sekmesinde yerel webview bildirimlerin üstünü örter: mesaj içerik alanının üstündeki çubukta da görünsün
+  if (active?.web) webNote(text, kind);
 }
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -68,8 +86,8 @@ function persist(now = false): void {
   clearTimeout(stateTimer);
   const run = () => {
     if (active?.view) saved.pos[active.path] = active.view.getPos();
-    saved.tabs = tabs.filter((t) => !t.data).map((t) => ({ path: t.path, name: t.name }));
-    saved.active = active?.path ?? null;
+    saved.tabs = tabs.filter((t) => !t.data && (!t.web || t.web.url)).map((t) => ({ path: tabKey(t), name: t.name }));
+    saved.active = active ? tabKey(active) : null;
     saved.color = tools.color;
     saved.size = tools.size;
     // Konum kaydı sınırsız büyümesin: yalnızca son açılanlar ve açık sekmeler kalsın
@@ -105,9 +123,14 @@ function renderTabs(): void {
     t.btn.setAttribute("aria-selected", String(t === active));
   }
   const hasDoc = !!active?.view;
+  const hasWeb = !!active?.web;
   $("welcome").hidden = tabs.length > 0;
   $("doc-controls").hidden = !hasDoc;
   document.body.classList.toggle("has-doc", hasDoc);
+  $("web-controls").hidden = !hasWeb;
+  $("web-host").hidden = !hasWeb;
+  $("btn-nlm").hidden = $("btn-media").hidden = !hasDoc || !!active?.data || active?.path === BOARD_TAB;
+  refreshMedia();
   $("btn-board").classList.toggle("on", !!active?.view?.onBoard);
   active?.btn.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
@@ -140,6 +163,7 @@ function makeTab(src: PdfSource): Tab {
 
 /** Sekmenin PDF'ini (henüz yüklenmediyse) yükler. Sekmeler ilk tıklandığında yüklenir. */
 function load(tab: Tab): Promise<void> {
+  if (tab.web) return Promise.resolve();
   if (tab.view || tab.loading) return tab.loading ?? Promise.resolve();
   tab.failed = false;
   tab.btn.classList.add("loading");
@@ -199,13 +223,15 @@ function showView(tab: Tab): void {
 }
 
 function activate(tab: Tab): void {
-  if (active === tab && tab.view) return;
+  if (active === tab && (tab.view || tab.web)) return;
   if (active?.view) {
     saved.pos[active.path] = active.view.getPos();
     active.view.el.hidden = true;
   }
+  if (active?.web) hideWeb(active);
   active = tab;
-  if (tab.view) showView(tab);
+  if (tab.web) showWeb(tab);
+  else if (tab.view) showView(tab);
   else void load(tab);
   renderTabs();
   renderSidebar();
@@ -234,6 +260,7 @@ function closeTab(tab: Tab): void {
     tab.view.dispose();
     tab.view = null;
   }
+  if (tab.web?.opened) web.webClose(tab.web.label).catch((e) => console.error("Web sekmesi kapatılamadı", e));
   tabs.splice(i, 1);
   if (active === tab) {
     active = null;
@@ -257,6 +284,225 @@ async function openDialog(): Promise<void> {
   } catch (e) {
     toast("Dosya seçilemedi: " + message(e));
   }
+}
+
+// ------------------------------------------------------------ Web sekmeleri (src/web/)
+// Site, ana pencereye gömülü ayrı bir yerel webview'da açılır (iframe değil: Google iframe'de açılmaz).
+// Webview içerik alanının (#web-area) üstüne konumlanır; başka sekme etkinken gizlenir.
+
+let webSeq = 0;
+/** Kayıtta web sekmesi adresiyle saklanır ("web:https://…"); PDF sekmesi yoluyla. */
+const tabKey = (t: Tab) => (t.web ? "web:" + t.web.url : t.path);
+
+function makeWebTab(url: string, name: string): Tab {
+  const label = `web-${Date.now().toString(36)}${++webSeq}`;
+  const tab = makeTab({ path: "web:" + label, name: name || (url ? hostLabel(url) : "Yeni site") });
+  tab.web = { label, url, opened: false };
+  tab.btn.classList.add("web");
+  tab.btn.title = url || "Web sekmesi";
+  return tab;
+}
+
+function openWebTab(url = ""): Tab {
+  const tab = makeWebTab(url, "");
+  tabs.push(tab);
+  activate(tab);
+  return tab;
+}
+
+const webTab = (label: string) => tabs.find((t) => t.web?.label === label);
+
+function setTabName(tab: Tab, name: string): void {
+  tab.name = name;
+  tab.btn.querySelector(".tab-name")!.textContent = name;
+}
+
+/** İçerik alanının pencere içindeki yeri (CSS pikseli = Tauri'nin mantıksal pikseli). */
+function webRect(): web.Rect | null {
+  const r = $("web-area").getBoundingClientRect();
+  if (r.width < 2 || r.height < 2) return null;
+  return { x: r.left, y: r.top, w: r.width, h: r.height };
+}
+
+let boundsFrame = 0;
+function syncWeb(): void {
+  cancelAnimationFrame(boundsFrame);
+  boundsFrame = requestAnimationFrame(() => {
+    const w = active?.web;
+    if (w?.opened) web.webBounds(w.label, webRect()).catch((e) => console.error("Web görünümü konumlanamadı", e));
+  });
+}
+
+function showWeb(tab: Tab): void {
+  const w = tab.web!;
+  $("web-host").hidden = false; // ölçülebilsin diye renderTabs'tan önce
+  $("web-start").hidden = w.opened;
+  $("web-note").hidden = true;
+  const input = $<HTMLInputElement>("web-address");
+  input.value = w.url;
+  if (w.opened) syncWeb();
+  else if (w.url) void navigateWeb(tab, w.url);
+  else requestAnimationFrame(() => input.focus());
+}
+
+function hideWeb(tab: Tab): void {
+  if (tab.web?.opened) web.webBounds(tab.web.label, null).catch((e) => console.error("Web görünümü gizlenemedi", e));
+}
+
+async function navigateWeb(tab: Tab, url: string): Promise<void> {
+  const w = tab.web!;
+  try {
+    await web.webOpen(w.label, url, webRect() ?? { x: 0, y: 0, w: 800, h: 600 });
+    if (!tabs.includes(tab)) {
+      void web.webClose(w.label).catch(() => {}); // açılırken sekme kapatıldı
+      return;
+    }
+    w.url = url;
+    tab.btn.title = url;
+    if (!w.opened) {
+      w.opened = true;
+      if (tab === active) {
+        $("web-start").hidden = true;
+        syncWeb();
+      } else hideWeb(tab); // açılırken başka sekmeye geçildi
+    }
+    persist();
+  } catch (e) {
+    toast(message(e));
+  }
+}
+
+function goAddress(): void {
+  const tab = active;
+  const input = $<HTMLInputElement>("web-address");
+  if (!tab?.web) return;
+  const r = normalizeInput(input.value);
+  if (!r.ok) return toast(r.error);
+  input.value = r.url;
+  input.blur();
+  void navigateWeb(tab, r.url);
+}
+
+let noteTimer = 0;
+/** İçerik alanının üstündeki bildirim çubuğu (web sekmesinde bildirimler webview'un altında kalır). ms=0: kalıcı */
+function webNote(text: string, kind: "error" | "info" = "info", actions: { label: string; run: () => void }[] = [], ms = 9000): void {
+  const note = $("web-note");
+  note.className = kind;
+  const span = document.createElement("span");
+  span.className = "note-text";
+  span.textContent = text;
+  note.replaceChildren(span);
+  for (const a of actions) {
+    const b = document.createElement("button");
+    b.textContent = a.label;
+    b.addEventListener("click", a.run);
+    note.append(b);
+  }
+  const x = document.createElement("button");
+  x.textContent = "×";
+  x.title = "Kapat";
+  x.addEventListener("click", () => (note.hidden = true));
+  note.append(x);
+  note.hidden = false;
+  clearTimeout(noteTimer);
+  if (ms) noteTimer = window.setTimeout(() => (note.hidden = true), ms);
+}
+
+/** NotebookLM sekmesini öne getirir (yoksa açar). */
+function notebookTab(): Tab {
+  const t = tabs.find((x) => x.web && (x.web.nlm || isNotebookLm(x.web.url)));
+  if (t) {
+    activate(t);
+    return t;
+  }
+  const tab = openWebTab(NOTEBOOKLM_URL);
+  tab.web!.nlm = true;
+  return tab;
+}
+
+/**
+ * "NotebookLM'e gönder": yükleme kullanıcıda kalır (Google sayfasına tıklama/betik yok).
+ * PDF yolu panoya kopyalanır, NotebookLM sekmesi açılır, sonraki ses/video indirmesi bu PDF'e bağlanır.
+ */
+async function sendToNotebookLm(): Promise<void> {
+  const pdf = active;
+  if (!pdf?.view || pdf.data || pdf.path === BOARD_TAB) return toast("Önce diskteki bir PDF'i aç.", "info");
+  mediaStore.markSent(pdf.path, pdf.name);
+  let copied = true;
+  try {
+    await navigator.clipboard.writeText(pdf.path);
+  } catch {
+    copied = false;
+  }
+  notebookTab();
+  webNote((copied ? `"${pdf.name}" dosyasının yolu panoya kopyalandı. ` : "")
+    + "NotebookLM'de Kaynak ekle → Dosya yükle'ye bas, açılan pencerede dosya adı kutusuna Ctrl+V yapıştırıp Enter'a bas. "
+    + "Sesli/Video özeti oluşturup indirince bu PDF'e bağlanır.", "info",
+  [{ label: "Klasörde göster", run: () => void web.revealFile(pdf.path).catch((e) => toast(message(e))) }], 0);
+}
+
+function onWebDownload(d: web.DownloadDone): void {
+  if (!d.ok) return toast("İndirme tamamlanamadı" + (d.path ? ": " + backend.baseName(d.path) : "."));
+  if (!d.media) return toast("İndirildi: " + d.path, "info");
+  const pdf = mediaStore.linkDownload(d.path);
+  refreshMedia();
+  toast(pdf
+    ? `Özet kaydedildi ve "${pdf.name}" PDF'ine bağlandı. PDF sekmesinde kulaklık düğmesinden dinleyebilirsin.`
+    : `Özet kaydedildi: ${d.path}. Bir PDF'e bağlamak için PDF'te kulaklık düğmesi → "Dosya ekle".`, "info");
+}
+
+function initWeb(): void {
+  const input = $<HTMLInputElement>("web-address");
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") goAddress();
+    if (e.key === "Escape") {
+      input.value = active?.web?.url ?? "";
+      input.blur();
+    }
+  });
+  input.addEventListener("focus", () => input.select());
+  const nav = (action: "back" | "forward" | "reload") => () => {
+    const w = active?.web;
+    if (w?.opened) web.webNav(w.label, action).catch((e) => toast(message(e)));
+  };
+  $("btn-web-back").addEventListener("click", nav("back"));
+  $("btn-web-forward").addEventListener("click", nav("forward"));
+  $("btn-web-reload").addEventListener("click", nav("reload"));
+  $("btn-web-external").addEventListener("click", () => {
+    const url = active?.web?.url;
+    if (url) web.openExternal(url).catch((e) => toast(message(e)));
+  });
+  $("btn-web").addEventListener("click", () => openWebTab());
+  $("btn-welcome-web").addEventListener("click", () => openWebTab());
+  $("btn-web-nlm").addEventListener("click", () => {
+    if (!active?.web) return;
+    active.web.nlm = true;
+    void navigateWeb(active, NOTEBOOKLM_URL);
+  });
+  $("btn-nlm").addEventListener("click", () => void sendToNotebookLm());
+  new ResizeObserver(syncWeb).observe($("web-area"));
+  window.addEventListener("resize", syncWeb);
+
+  web.listenWeb({
+    page: (label, url, loading) => {
+      const t = webTab(label);
+      if (!t) return;
+      t.btn.classList.toggle("loading", loading);
+      if (!/^https?:/i.test(url)) return;
+      t.web!.url = url;
+      t.btn.title = url;
+      const input = $<HTMLInputElement>("web-address");
+      if (t === active && document.activeElement !== input) input.value = url;
+      persist();
+    },
+    title: (label, title) => {
+      const t = webTab(label);
+      if (!t) return;
+      setTabName(t, title.trim() || hostLabel(t.web!.url));
+      persist();
+    },
+    download: onWebDownload,
+  }).catch((e) => console.error("Web olayları dinlenemedi", e));
 }
 
 // ------------------------------------------------------------ Sayfa / yakınlaştırma
@@ -618,9 +864,18 @@ async function init(): Promise<void> {
   calc = initCalculator();
   initExams();
   initTextPlace();
-  initAi({ current: () => (active?.view ? { path: active.path, name: active.name, view: active.view } : null), toast });
+  initAi({
+    current: () => (active?.view ? { path: active.path, name: active.name, view: active.view } : null),
+    web: () => (active?.web?.opened ? { path: active.path, name: active.name, label: active.web.label, url: active.web.url } : null),
+    toast,
+  });
+  initMedia({
+    current: () => (active?.view && !active.data && active.path !== BOARD_TAB ? { path: active.path, name: active.name } : null),
+    toast,
+  });
+  initWeb();
   initMcp({
-    docs: () => tabs.map((t) => ({ path: t.path, name: t.name, view: t.view, active: t === active, failed: t.failed })),
+    docs: () => tabs.filter((t) => !t.web).map((t) => ({ path: t.path, name: t.name, view: t.view, active: t === active, failed: t.failed })),
     activate: (path) => { const t = tabs.find((x) => x.path === path); if (t) activate(t); },
     load: async (path) => {
       const t = tabs.find((x) => x.path === path);
@@ -687,8 +942,11 @@ async function init(): Promise<void> {
   }
 
   // Önceki oturumun sekmeleri: yalnızca etkin olan hemen yüklenir
-  for (const t of saved.tabs) tabs.push(makeTab(t));
-  const first = tabs.find((t) => t.path === saved.active) ?? tabs[0];
+  for (const t of saved.tabs) {
+    if (!t.path.startsWith("web:")) tabs.push(makeTab(t));
+    else if (normalizeInput(t.path.slice(4)).ok) tabs.push(makeWebTab(t.path.slice(4), t.name));
+  }
+  const first = tabs.find((t) => tabKey(t) === saved.active) ?? tabs[0];
   if (first) activate(first);
   renderTabs();
   renderSidebar();

@@ -142,6 +142,29 @@ export type ActionId = keyof typeof ACTION_PROMPTS;
 /** Öğrenci görüntüyle birlikte kendi sorusunu yazınca sorunun önüne eklenir. */
 export const FREE_QUESTION_HINT = "Görüntüdeki içerikle ilgili sorum:";
 
+/**
+ * Web sekmesi ("Bu sayfayı anlat/özetle", "Beni sına"): görüntü yerine sayfanın düz metni gider.
+ * Metin uygulama tarafından indirilip ayıklanır (src/web/html-text.ts); görüntü olmadığı için işaret konmaz.
+ */
+export function webPagePrompt(
+  id: "explainPage" | "summarizePage" | "quiz", title: string, url: string, text: string, truncated: boolean,
+): string {
+  const task = ACTION_PROMPTS[id]
+    .replace("Bu, çalıştığım PDF'in bir sayfasının tamamı.", "Bu, çalıştığım bir web sayfasının metni.")
+    .replace(/görüntüdeki|Görüntüdeki/g, (m) => (m[0] === "G" ? "Sayfadaki" : "sayfadaki"))
+    .replace(/Bu görüntü/g, "Bu sayfa");
+  return `${task}
+
+Not: Görüntü yok; yalnızca sayfanın menülerden ayıklanmış düz metni var. Sayfada işaret koyma. Metinde olmayan bilgiyi sayfadaymış gibi sunma.${truncated ? " Sayfa uzun olduğu için metnin yalnızca başı verildi; bunu bir cümleyle belirt." : ""}
+
+Sayfa: ${title || url}
+Adres: ${url}
+
+--- SAYFA METNİ ---
+${text}
+--- SON ---`;
+}
+
 /** Belge bağlamı: hangi dosyanın hangi sayfası olduğunu modele söyler. */
 export function contextLine(name: string, page: number): string {
   return `(Belge: "${name.replace(/\.pdf$/i, "")}", sayfa ${page})`;

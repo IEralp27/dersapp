@@ -13,7 +13,9 @@ import { initLearner, learnerAction, profileEntry, profileView, systemWithProfil
 import {
   initLesson, lessonChip, lessonCompose, lessonInput, lessonInterrupt, lessonPlaceholder, lessonSync, lessonTakesInput,
 } from "./lesson-ui";
-import { ACTION_PROMPTS, FREE_QUESTION_HINT, SYSTEM_PROMPT, contextLine } from "./prompts";
+import { ACTION_PROMPTS, FREE_QUESTION_HINT, SYSTEM_PROMPT, contextLine, webPagePrompt } from "./prompts";
+import { htmlToText, pageProblem } from "../web/html-text";
+import { webPageText } from "../web/web-backend";
 import type { ActionId } from "./prompts";
 import {
   actionHint, attachMarks, clearMarks, initMarks, marksSettingField, pageRegion, rulerImage, setRegion, systemWithMarks, visibleText,
@@ -28,7 +30,16 @@ import type { ChatImage, ChatMessage, ModelInfo, Settings } from "./providers";
 export interface AiHost {
   /** Etkin sekme (PDF'i yüklenmişse) */
   current(): { path: string; name: string; view: PdfView } | null;
+  /** Etkin web sekmesi (sayfası açılmışsa); metni "Bu sayfayı anlat" için Rust'tan indirilir */
+  web?(): WebCurrent | null;
   toast(text: string, kind?: "error" | "info"): void;
+}
+
+interface WebCurrent {
+  path: string;
+  name: string;
+  label: string;
+  url: string;
 }
 
 interface Attachment {
@@ -186,7 +197,7 @@ function convFor(path: string, name: string): Conv {
 }
 
 function activeConv(): Conv | null {
-  const cur = host.current();
+  const cur = host.current() ?? host.web?.() ?? null;
   return cur ? convFor(cur.path, cur.name) : null;
 }
 
@@ -398,6 +409,13 @@ function sendTyped(): void {
   const c = activeConv();
   const q = input.value.trim();
   if (!c || !q || c.busy) return;
+  if (!host.current()) {
+    // web sekmesi: soru olduğu gibi gider (sayfa metni "Bu sayfayı anlat" ile konuşmaya girer)
+    input.value = "";
+    autosize();
+    void ask(c, { text: q, label: q, att: null });
+    return;
+  }
   if (lessonTakesInput(c.path)) {
     // Ders kontrol sorusunun cevabı ya da ara soru (lesson-ui.ts)
     input.value = "";
@@ -415,6 +433,36 @@ function sendTyped(): void {
     label: q,
     att,
   });
+}
+
+/** Web sekmesi: sayfa metnini Rust'tan indirir, ayıklar ve PDF sayfası gibi panele verir. */
+let webFetching = false;
+async function webAction(id: "explainPage" | "summarizePage" | "quiz"): Promise<void> {
+  const w = host.web?.();
+  const c = activeConv();
+  if (!w || !c || c.busy || webFetching) return;
+  if (missing(settings)) {
+    render();
+    return;
+  }
+  webFetching = true;
+  render();
+  try {
+    const page = await webPageText(w.label);
+    const text = htmlToText(page.html);
+    const why = pageProblem(page, text);
+    if (why) return host.toast(why);
+    void ask(c, {
+      text: webPagePrompt(id, text.title || w.name, page.url, text.text, text.truncated),
+      label: `${ACTION_LABELS[id]} · ${w.name}`,
+      att: null,
+    });
+  } catch (e) {
+    host.toast(errText(e));
+  } finally {
+    webFetching = false;
+    render();
+  }
 }
 
 function onSnip(e: Event): void {
@@ -477,7 +525,19 @@ function render(): void {
   }
   composeEl.hidden = false;
 
-  if (!c || !cur) {
+  if (c && !cur) {
+    // web sekmesi
+    if (shown !== c || !mainEl.contains(c.thread)) {
+      shown = c;
+      mainEl.replaceChildren(c.thread);
+      if (!c.thread.childElementCount) mainEl.append(emptyView(
+        "Bu web sayfasını anlatmamı, özetlememi ya da senden sınav yapmamı isteyebilirsin. Sayfanın metni uygulama "
+        + "tarafından ayrıca indirilir; giriş gerektiren sayfalar (ör. NotebookLM) okunamaz."));
+      scrollDown();
+    } else if (c.thread.childElementCount) {
+      mainEl.querySelector(".ai-empty")?.remove();
+    }
+  } else if (!c || !cur) {
     shown = null;
     mainEl.replaceChildren(emptyView("Önce bir PDF aç. Sonra soldaki ekran görüntüsü aracıyla (C) bir bölge seç; panel o bölgeyi sana anlatır."));
   } else {
@@ -506,6 +566,7 @@ function renderCompose(c: Conv | null): void {
   composeEl.replaceChildren();
   const busy = !!c?.busy;
   const noDoc = !c;
+  if (c && !host.current()) return renderWebCompose(busy);
 
   const lesson = lessonCompose(c?.path ?? null, busy); // ders formu / devam önerisi / denetim çubuğu
   if (lesson) composeEl.append(lesson);
@@ -567,6 +628,27 @@ function renderCompose(c: Conv | null): void {
   }
   sendBtn.setAttribute("aria-label", sendBtn.title);
   sendBtn.disabled = noDoc;
+  bar.append(input, sendBtn);
+  composeEl.append(bar);
+}
+
+/** Web sekmesinin alt kısmı: sayfa düğmeleri + soru kutusu (ders modu ve test üretimi PDF'e özgü). */
+function renderWebCompose(busy: boolean): void {
+  const row = el("div", "ai-page-actions");
+  for (const id of ["explainPage", "summarizePage", "quiz"] as const) {
+    const b = textBtn(webFetching && !busy ? "Sayfa alınıyor…" : ACTION_LABELS[id], "ai-chip", () => void webAction(id));
+    b.disabled = busy || webFetching;
+    row.append(b);
+  }
+  composeEl.append(row, profileEntry(openProfile));
+  const bar = el("div", "ai-input");
+  input.disabled = false;
+  input.placeholder = "Bir soru yaz…";
+  sendBtn.innerHTML = svg(busy ? ICONS.stop : ICONS.send);
+  sendBtn.title = busy ? "Durdur" : "Gönder (Enter)";
+  sendBtn.classList.toggle("stop", busy);
+  sendBtn.setAttribute("aria-label", sendBtn.title);
+  sendBtn.disabled = false;
   bar.append(input, sendBtn);
   composeEl.append(bar);
 }

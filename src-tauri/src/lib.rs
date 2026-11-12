@@ -1,6 +1,7 @@
 mod cli;
 mod piper;
 mod store;
+mod web;
 
 use std::path::PathBuf;
 use tauri::{ipc::Response, AppHandle, Manager};
@@ -109,7 +110,9 @@ pub fn run() {
             mcp_take_requests, mcp_respond, mcp_context,
             load_profile, save_profile, profile_path,
             cli_prepare, cli_start, cli_stop,
-            piper::piper_status, piper::piper_install, piper::piper_synthesize, piper::piper_remove
+            piper::piper_status, piper::piper_install, piper::piper_synthesize, piper::piper_remove,
+            web::web_open, web::web_bounds, web::web_nav, web::web_close, web::web_page_text,
+            web::open_external, web::reveal_file, web::media_import, web::media_read
         ])
         .run(tauri::generate_context!())
         .expect("uygulama başlatılamadı");

@@ -1,0 +1,95 @@
+/* Web sekmesi ve Ses/Video özetleri */
+#web-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  padding-left: 12px;
+  flex: 0 1 560px;
+  min-width: 220px;
+}
+#web-address {
+  flex: 1;
+  min-width: 80px;
+  height: 26px;
+  margin: 0 4px;
+  padding: 0 8px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--fg);
+  user-select: text;
+}
+#web-address:focus { border-color: var(--accent); outline: none; }
+
+#web-host {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* Yerel webview bu alanın üstüne konumlanır; bildirim çubuğu onun dışında kalır ki görünsün */
+#web-area { flex: 1; min-height: 0; position: relative; }
+#web-start {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--dim);
+  text-align: center;
+}
+#web-start .hint { font-size: 12px; }
+#web-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: var(--raised);
+  border-bottom: 1px solid var(--line);
+  line-height: 1.4;
+  user-select: text;
+}
+#web-note.error { border-left: 3px solid var(--danger); }
+#web-note .note-text { flex: 1; }
+#web-note button { flex: none; }
+
+#btn-nlm { padding: 4px 8px; color: var(--fg); white-space: nowrap; }
+#btn-media { position: relative; }
+#media-count {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  line-height: 14px;
+}
+
+#media-pop {
+  position: fixed;
+  top: 44px;
+  right: 12px;
+  width: 360px;
+  max-height: 70vh;
+  overflow: auto;
+  z-index: 20;
+  padding: 10px 12px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px #000a;
+}
+#media-pop h3 { margin: 0 0 8px; font-size: 13px; }
+.media-empty { margin: 0 0 8px; color: var(--dim); line-height: 1.45; }
+.media-list { list-style: none; margin: 0 0 8px; padding: 0; }
+.media-list li { padding: 4px 0; border-bottom: 1px solid var(--line); }
+.media-row { display: flex; align-items: center; gap: 4px; }
+.media-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; color: var(--fg); }
+.media-act { flex: none; color: var(--dim); }
+.media-player { width: 100%; margin-top: 6px; max-height: 240px; background: #000; border-radius: 4px; }
