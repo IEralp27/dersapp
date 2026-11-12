@@ -112,6 +112,7 @@ pub fn run() {
             load_profile, save_profile, profile_path,
             cli_prepare, cli_start, cli_stop,
             kayit::kayit_write, kayit::kayit_read, kayit::kayit_delete, kayit::kayit_export,
+            kayit::kayit_path,
             piper::piper_status, piper::piper_install, piper::piper_synthesize, piper::piper_remove,
             web::web_open, web::web_bounds, web::web_nav, web::web_close, web::web_page_text,
             web::open_external, web::reveal_file, web::media_import, web::media_read

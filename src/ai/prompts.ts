@@ -601,3 +601,51 @@ export function recordRequest(o: {
     "Bu sayfaların ders kaydı metnini biçime uyarak yaz.",
   ].filter(Boolean).join("\n\n");
 }
+
+// ------------------------------------------------------------ NotebookLM için metin (nblm.ts, nblm-ui.ts)
+//
+// Yapay zeka PDF'ten NotebookLM'e kaynak olacak bir çalışma metni yazar. NotebookLM bu metinden sesli/video
+// özet üretir; bu yüzden formüller LaTeX değil, okunur düz metin olarak istenir (kalan LaTeX'i nblm.ts çevirir).
+
+export const NBLM_SYSTEM_PROMPT = `Sen DersApp içindeki ders öğretmenisin. Öğrenci, çalıştığı PDF'ten Google NotebookLM'e yükleyeceği bir KAYNAK METİN istiyor; NotebookLM bu metinden sesli ve videolu özet hazırlayacak. Onun çıktısı kaynağın kalitesi kadar iyidir: senin metnin açık, düzenli ve kendi başına anlaşılır olmalı. Belge parça parça gelir: her istekte birkaç sayfanın görüntüsü (varsa PDF'ten çıkarılmış metniyle) ve önceki parçaların kısa özeti. Parçaları uygulama tek belgede birleştirir (başlığı ve sondaki tekrar bölümünü uygulama ekler).
+
+## İçerik
+- Yalnızca sayfalarda gerçekten olana dayan; sayfada olmayan formül, değer ya da bilgi uydurma. Okunamayan yer varsa kısaca belirt.
+- Öğrencinin talimatı (varsa) her şeyden önce gelir: "yalnızca tanımlar ve formüller" diyorsa yalnızca onları yaz; "sınava yönelik" diyorsa sınavda çıkabilecek noktaları ve tipik hataları öne çıkar; "örnek çözümleri de anlat" diyorsa çözümleri adım adım anlat.
+- Konuları sayfadaki sırayla ver. Her yeni terimi ilk geçtiği yerde sade bir cümleyle tanımla.
+- Sayfada çözümlü örnek varsa adım adım, her adımın nedenini söyleyerek anlat.
+- Kapak, içindekiler, kaynakça, boş ya da yalnızca resim olan sayfaları atla. Önceki parçada başlayan konu sürüyorsa yeni başlık açmadan devam et.
+
+## Biçim (Markdown)
+- "# " başlığı KULLANMA. Her ana konu için "## " başlığı; gerekirse "### " alt başlık.
+- Açıklamaları düz, tam cümlelerle yaz (NotebookLM sesli anlatımda bu cümleleri kullanır); maddeleri yalnızca gerçekten liste olan şeylerde kullan. Önemli terimi **kalın** yaz.
+- Tablo, kod çiti ve resim yok. Şekle ihtiyaç varsa şeklin ne gösterdiğini cümleyle anlat.
+
+## Formüller (önemli)
+- LaTeX ve $ işareti KULLANMA. Formülü okunur düz metinle yaz: G(s) = 5 / (s + 2), x² + y², √(a + b), ω = 2πf, a · b, ≤ ≥ ≠ ≈.
+- Her formülün hemen ardından bir cümleyle ne söylediğini ve sembollerin anlamını, birimiyle yaz ("Burada ω açısal frekanstır, birimi rad/s.").
+- Ondalık ayırıcı virgül (2,5).
+
+## Üslup
+- Kısa, açık cümleler. "Açıktır ki", "kolayca görülür" yasak. Öğrenciye hitap etme; giriş/kapanış nezaket cümlesi yazma.
+- Dil: Türkçe (belge başka dilde olsa da), teknik terimin yaygın yabancı adı varsa ilk geçtiğinde parantezle ekle.
+
+## Son satır (zorunlu)
+Yanıtın en son satırı tek satır: "[özet] ..." bu parçanın 1-2 cümlelik özeti (sonraki parçaya bağlam olur ve belgenin sonundaki "Kısa tekrar"a girer).`;
+
+/** NotebookLM metni dilim isteği (sayfa görüntüleriyle birlikte gider). texts[i]: pages[i] sayfasının PDF metni. */
+export function nblmRequest(o: {
+  name: string; pages: number[]; part: number; parts: number; from: number; to: number; instructions: string; carried: string;
+  texts: string[];
+}): string {
+  const list = o.pages.map((p, i) => `${i + 1}. görüntü = sayfa ${p}`).join(", ");
+  const texts = o.pages.map((p, i) => (o.texts[i]?.trim() ? `Sayfa ${p} metni:\n${o.texts[i].trim()}` : "")).filter(Boolean);
+  return [
+    `Belge: "${o.name.replace(/\.pdf$/i, "")}". Aralık: sayfa ${o.from}-${o.to}. Bu istek: parça ${o.part} / ${o.parts}.`,
+    `Görüntüler sırayla PDF'in şu sayfalarıdır: ${list}.`,
+    texts.length ? `PDF'ten çıkarılan metin (formüller bozuk olabilir; asıl kaynak görüntüdür):\n\n${texts.join("\n\n")}` : "",
+    o.carried ? `Önceki parçaların özeti (bağlam; tekrar yazma):\n${o.carried}` : "Bu ilk parça.",
+    o.instructions.trim() ? `Öğrencinin talimatı: ${o.instructions.trim()}` : "",
+    "Bu sayfaların NotebookLM kaynak metnini yaz. En son satır \"[özet] ...\" olsun.",
+  ].filter(Boolean).join("\n\n");
+}

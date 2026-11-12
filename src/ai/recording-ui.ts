@@ -56,7 +56,7 @@ function button(label: string, cls: string, onClick: () => void, title = ""): HT
 
 // ------------------------------------------------------------ Dosyalar (Rust: kayit.rs)
 
-async function writeFile(id: string, file: string, data: Uint8Array): Promise<void> {
+export async function writeFile(id: string, file: string, data: Uint8Array): Promise<void> {
   await invoke("kayit_write", data, { headers: { "x-kayit-id": id, "x-kayit-file": file } });
 }
 
@@ -87,7 +87,7 @@ async function removeRecording(pdf: string, id: string): Promise<void> {
   refreshMedia();
 }
 
-async function exportFile(id: string, file: string, name: string): Promise<void> {
+export async function exportFile(id: string, file: string, name: string): Promise<void> {
   try {
     const { save } = await import("@tauri-apps/plugin-dialog");
     const ext = file.split(".").pop()!;

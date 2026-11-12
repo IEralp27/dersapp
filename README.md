@@ -48,6 +48,13 @@ Yapay zeka metni 3'er sayfalık bölümlerle bir kez yazar, Piper ya da bulut se
 (sayfaya gider, işaretleri gösterir, okunan cümle listede vurgulanır; hız, sarma, cümleye tıklama). Yarım kalan kayıt listeden sürdürülür.
 Dosyalar veri klasöründe `dersler/<kimlik>/` (`ders.md`, `ses.wav`, `kayit.json`); listeden .md ve ses dışa aktarılır. Sistem sesi kayıt yapamaz.
 
+## NotebookLM için metin
+
+Yapay zeka panelinde "NotebookLM metni": sayfa aralığı ve isteğe bağlı talimat ("sınava yönelik", "yalnızca tanımlar ve formüller") seç.
+Yapay zeka 4'er sayfalık bölümlerle başlıklı, açıklamalı bir Türkçe çalışma metni yazar (formüller düz metin, sonda kısa tekrar).
+Sonuç `.md` dosyası (`dersler/<kimlik>/`), PDF'in kulaklık listesinde görünür; "NotebookLM'e gönder" yolunu panoya kopyalar, "Kaydet" başka yere yazar.
+PDF çıktısı yok: mevcut PDF dışa aktarımı metni resim yapar ve Türkçe harfli gömülü yazı tipi yok. Mantık `ai/nblm.ts` (`node src/ai/nblm.test.ts`), pencere `ai/nblm-ui.ts`.
+
 ## Kendi yapay zeka uygulamanı bağlama (MCP)
 
 Claude Desktop, Claude Code, Gemini CLI gibi uygulamalar DersApp'e bağlanıp açık PDF'i okuyabilir ve test gönderebilir. Kurulum: `docs/MCP.md`.

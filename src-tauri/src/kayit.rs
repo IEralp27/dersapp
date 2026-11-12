@@ -11,7 +11,14 @@ pub fn valid_id(id: &str) -> bool {
 }
 
 pub fn valid_file(name: &str) -> bool {
-    FILES.contains(&name)
+    FILES.contains(&name) || valid_source(name)
+}
+
+/// "NotebookLM için metin" dosyası: `[a-z0-9-]{1,80}.md` (arayüzde nblm.ts validSourceFile ile aynı kural).
+pub fn valid_source(name: &str) -> bool {
+    name.strip_suffix(".md").is_some_and(|stem| {
+        !stem.is_empty() && stem.len() <= 80 && stem.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+    })
 }
 
 fn root(app: &AppHandle) -> Result<PathBuf, String> {
@@ -89,6 +96,12 @@ pub async fn kayit_export(app: AppHandle, id: String, file: String, dest: String
         .map_err(|e| format!("Dışa aktarılamadı: {e}"))
 }
 
+/// Dosyanın diskteki tam yolu (NotebookLM'e gönderirken panoya kopyalanır).
+#[tauri::command]
+pub async fn kayit_path(app: AppHandle, id: String, file: String) -> Result<String, String> {
+    Ok(file_path(&app, &id, &file)?.to_string_lossy().into_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -103,5 +116,9 @@ mod tests {
         assert!(valid_file("ses.wav"));
         assert!(!valid_file("../ses.wav"));
         assert!(!valid_file("baska.txt"));
+        assert!(valid_file("kontrol-s3-9-notebooklm.md"));
+        assert!(!valid_file(".md"));
+        assert!(!valid_file("../x.md"));
+        assert!(!valid_file("Buyuk.md"));
     }
 }

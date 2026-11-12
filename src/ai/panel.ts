@@ -10,6 +10,7 @@ import { initTts, ttsAttach } from "./tts";
 import { renderMarkdown } from "./markdown";
 import { initStudy, studyRow, dialogOpen } from "./quiz-view";
 import { recordChip } from "./recording-ui";
+import { nblmChip } from "./nblm-ui";
 import { initLearner, learnerAction, profileEntry, profileView, systemWithProfile } from "./learner-ui";
 import {
   initLesson, lessonChip, lessonCompose, lessonInput, lessonInterrupt, lessonPlaceholder, lessonSync, lessonTakesInput,
@@ -608,6 +609,7 @@ function renderCompose(c: Conv | null): void {
     }
     row.append(lessonChip(c?.path ?? null, busy));
     row.append(recordChip(busy || noDoc)); // Ders kaydı (recording-ui.ts)
+    row.append(nblmChip(busy || noDoc)); // NotebookLM metni (nblm-ui.ts)
     composeEl.append(row);
   }
 
