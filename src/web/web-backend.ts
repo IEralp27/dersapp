@@ -20,6 +20,8 @@ export interface DownloadDone {
 
 export interface WebEvents {
   page(label: string, url: string, loading: boolean): void;
+  /** Linux: sekmenin ayrı penceresi kullanıcı tarafından kapatıldı */
+  closed(label: string): void;
   title(label: string, title: string): void;
   download(d: DownloadDone): void;
 }
@@ -31,14 +33,16 @@ export async function listenWeb(h: WebEvents): Promise<void> {
   await listen<{ label: string; url: string; loading: boolean }>("web-sayfa", (e) => h.page(e.payload.label, e.payload.url, e.payload.loading));
   await listen<{ label: string; title: string }>("web-baslik", (e) => h.title(e.payload.label, e.payload.title));
   await listen<DownloadDone>("web-indirme", (e) => h.download(e.payload));
+  await listen<{ label: string }>("web-kapandi", (e) => h.closed(e.payload.label));
 }
 
-export async function webOpen(label: string, url: string, r: Rect): Promise<void> {
+/** true: site ayrı pencerede açıldı (Linux; orada gömülü webview konumlanamıyor) */
+export async function webOpen(label: string, url: string, r: Rect): Promise<boolean> {
   if (!inTauri) throw new Error(NEED_APP);
-  await invoke("web_open", { label, url, ...r });
+  return invoke<boolean>("web_open", { label, url, ...r });
 }
 
-/** r null ise gizler */
+/** r null ise gizler. Ayrı pencerede (Linux) r verilirse pencereyi öne getirir. */
 export async function webBounds(label: string, r: Rect | null): Promise<void> {
   if (!inTauri) return;
   await invoke("web_bounds", { label, ...(r ?? { x: 0, y: 0, w: 1, h: 1 }), visible: !!r });

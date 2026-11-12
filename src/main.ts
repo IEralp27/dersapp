@@ -37,6 +37,8 @@ interface WebState {
   url: string;
   /** Webview oluşturuldu mu */
   opened: boolean;
+  /** Linux: site ana pencereye gömülmedi, ayrı pencerede açık */
+  separate?: boolean;
   /** NotebookLM sekmesi (giriş sayfasına yönlenince de "NotebookLM'e gönder" bunu bulsun) */
   nlm?: boolean;
 }
@@ -329,7 +331,7 @@ function syncWeb(): void {
   cancelAnimationFrame(boundsFrame);
   boundsFrame = requestAnimationFrame(() => {
     const w = active?.web;
-    if (w?.opened) web.webBounds(w.label, webRect()).catch((e) => console.error("Web görünümü konumlanamadı", e));
+    if (w?.opened && !w.separate) web.webBounds(w.label, webRect()).catch((e) => console.error("Web görünümü konumlanamadı", e));
   });
 }
 
@@ -340,19 +342,28 @@ function showWeb(tab: Tab): void {
   $("web-note").hidden = true;
   const input = $<HTMLInputElement>("web-address");
   input.value = w.url;
-  if (w.opened) syncWeb();
+  if (w.opened && w.separate) raiseWeb(tab);
+  else if (w.opened) syncWeb();
   else if (w.url) void navigateWeb(tab, w.url);
   else requestAnimationFrame(() => input.focus());
 }
 
+/** Linux: sitenin ayrı penceresini öne getirir, içerik alanında bilgi gösterir. */
+function raiseWeb(tab: Tab): void {
+  const w = tab.web!;
+  web.webBounds(w.label, { x: 0, y: 0, w: 1, h: 1 }).catch((e) => console.error("Web penceresi öne getirilemedi", e));
+  webNote("Bu site ayrı bir pencerede açık (Linux). Sekmeyi kapatınca pencere de kapanır.", "info",
+    [{ label: "Pencereyi öne getir", run: () => raiseWeb(tab) }], 0);
+}
+
 function hideWeb(tab: Tab): void {
-  if (tab.web?.opened) web.webBounds(tab.web.label, null).catch((e) => console.error("Web görünümü gizlenemedi", e));
+  if (tab.web?.opened && !tab.web.separate) web.webBounds(tab.web.label, null).catch((e) => console.error("Web görünümü gizlenemedi", e));
 }
 
 async function navigateWeb(tab: Tab, url: string): Promise<void> {
   const w = tab.web!;
   try {
-    await web.webOpen(w.label, url, webRect() ?? { x: 0, y: 0, w: 800, h: 600 });
+    w.separate = await web.webOpen(w.label, url, webRect() ?? { x: 0, y: 0, w: 800, h: 600 });
     if (!tabs.includes(tab)) {
       void web.webClose(w.label).catch(() => {}); // açılırken sekme kapatıldı
       return;
@@ -363,7 +374,8 @@ async function navigateWeb(tab: Tab, url: string): Promise<void> {
       w.opened = true;
       if (tab === active) {
         $("web-start").hidden = true;
-        syncWeb();
+        if (w.separate) raiseWeb(tab);
+        else syncWeb();
       } else hideWeb(tab); // açılırken başka sekmeye geçildi
     }
     persist();
@@ -504,6 +516,10 @@ function initWeb(): void {
       persist();
     },
     download: onWebDownload,
+    closed: (label) => {
+      const t = webTab(label);
+      if (t) closeTab(t);
+    },
   }).catch((e) => console.error("Web olayları dinlenemedi", e));
 }
 

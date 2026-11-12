@@ -6,6 +6,10 @@
 //! sayfası web sekmesinde açılıp IPC'ye erişemesin). Google sayfalarına betik enjekte edilmez;
 //! yalnızca geri/ileri için tarayıcının kendi `history.back()`/`history.forward()` çağrısı yapılır.
 //!
+//! Linux: Tauri 2 (tauri-runtime-wry) çocuk webview'ları pencerenin GTK kutusuna (gtk::Box) dizer, konum/boyut
+//! verilemez (wry belgesi: build_as_child Linux'ta yalnızca X11). Bu yüzden Linux'ta her web sekmesi aynı
+//! WebviewBuilder ile kendi ayrı penceresinde açılır; pencere kapanınca arayüze "web-kapandi" gönderilir.
+//!
 //! İndirmeler: ses/video uzantılı dosyalar veri klasöründeki `medya/` klasörüne yazılır ve arayüze
 //! "web-indirme" olayı gönderilir (arayüz dosyayı NotebookLM'e gönderilen PDF'e bağlar).
 
@@ -113,6 +117,27 @@ struct PageEvent {
 }
 
 #[derive(Clone, Serialize)]
+struct ClosedEvent {
+    label: String,
+}
+
+/// Linux'ta web sekmesinin ayrı penceresinin etiketi
+#[cfg(target_os = "linux")]
+fn window_label(label: &str) -> String {
+    format!("{label}-pencere")
+}
+
+/// Linux'ta ayrı pencereyi öne getirir.
+#[cfg(target_os = "linux")]
+fn raise(app: &AppHandle, label: &str) {
+    if let Some(win) = app.get_window(&window_label(label)) {
+        let _ = win.unminimize();
+        let _ = win.show();
+        let _ = win.set_focus();
+    }
+}
+
+#[derive(Clone, Serialize)]
 struct TitleEvent {
     label: String,
     title: String,
@@ -137,14 +162,18 @@ fn webview(app: &AppHandle, label: &str) -> Result<tauri::Webview, String> {
 }
 
 /// Web sekmesini açar (yoksa oluşturur, varsa adrese gider). Konum/boyut arayüzün içerik alanıdır.
+/// Dönüş: true = ayrı pencerede açıldı (Linux), false = ana pencereye gömüldü.
 #[tauri::command]
-pub async fn web_open(app: AppHandle, label: String, url: String, x: f64, y: f64, w: f64, h: f64) -> Result<(), String> {
+pub async fn web_open(app: AppHandle, label: String, url: String, x: f64, y: f64, w: f64, h: f64) -> Result<bool, String> {
+    let separate = cfg!(target_os = "linux");
     check_label(&label)?;
     let url = allowed_url(&url)?;
     if let Some(wv) = app.get_webview(&label) {
-        return wv.navigate(url).map_err(|e| format!("Sayfa açılamadı: {e}"));
+        wv.navigate(url).map_err(|e| format!("Sayfa açılamadı: {e}"))?;
+        #[cfg(target_os = "linux")]
+        raise(&app, &label);
+        return Ok(separate);
     }
-    let window = app.get_window("main").ok_or("Ana pencere bulunamadı.")?;
     let media = media_dir(&app)?;
     let (a1, a2, a3) = (app.clone(), app.clone(), app.clone());
     let (l1, l2, l3) = (label.clone(), label.clone(), label.clone());
@@ -158,7 +187,11 @@ pub async fn web_open(app: AppHandle, label: String, url: String, x: f64, y: f64
             let loading = matches!(p.event(), PageLoadEvent::Started);
             to_main(&a1, "web-sayfa", PageEvent { label: l1.clone(), url: p.url().to_string(), loading });
         })
-        .on_document_title_changed(move |_, title| to_main(&a2, "web-baslik", TitleEvent { label: l2.clone(), title }))
+        .on_document_title_changed(move |_wv, title| {
+            #[cfg(target_os = "linux")]
+            let _ = _wv.window().set_title(&format!("{title} · DersApp"));
+            to_main(&a2, "web-baslik", TitleEvent { label: l2.clone(), title })
+        })
         .on_download(move |_, event| {
             match event {
                 DownloadEvent::Requested { url, destination } => {
@@ -185,25 +218,61 @@ pub async fn web_open(app: AppHandle, label: String, url: String, x: f64, y: f64
             }
             true
         });
-    window
-        .add_child(builder, LogicalPosition::new(x, y), LogicalSize::new(w.max(1.0), h.max(1.0)))
-        .map_err(|e| format!("Web sekmesi açılamadı: {e}"))?;
-    Ok(())
+    #[cfg(not(target_os = "linux"))]
+    {
+        let window = app.get_window("main").ok_or("Ana pencere bulunamadı.")?;
+        window
+            .add_child(builder, LogicalPosition::new(x, y), LogicalSize::new(w.max(1.0), h.max(1.0)))
+            .map_err(|e| format!("Web sekmesi açılamadı: {e}"))?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = (x, y, w, h);
+        let window = tauri::window::WindowBuilder::new(&app, window_label(&label))
+            .title("DersApp · web")
+            .inner_size(1100.0, 800.0)
+            .min_inner_size(400.0, 300.0)
+            .build()
+            .map_err(|e| format!("Web penceresi açılamadı: {e}"))?;
+        let (a4, l4) = (app.clone(), label.clone());
+        window.on_window_event(move |e| {
+            if let tauri::WindowEvent::Destroyed = e {
+                to_main(&a4, "web-kapandi", ClosedEvent { label: l4.clone() });
+            }
+        });
+        // Tek webview pencerenin GTK kutusunu doldurur
+        if let Err(e) = window.add_child(builder.auto_resize(), LogicalPosition::new(0.0, 0.0), LogicalSize::new(1100.0, 800.0)) {
+            let _ = window.destroy();
+            return Err(format!("Web sekmesi açılamadı: {e}"));
+        }
+    }
+    Ok(separate)
 }
 
 /// Konum/boyut ve görünürlük (başka sekme etkinken web görünümü gizlenir).
 #[tauri::command]
 pub async fn web_bounds(app: AppHandle, label: String, x: f64, y: f64, w: f64, h: f64, visible: bool) -> Result<(), String> {
     let wv = webview(&app, &label)?;
-    let err = |e: tauri::Error| format!("Web görünümü güncellenemedi: {e}");
-    if visible {
-        wv.set_position(LogicalPosition::new(x, y)).map_err(err)?;
-        wv.set_size(LogicalSize::new(w.max(1.0), h.max(1.0))).map_err(err)?;
-        wv.show().map_err(err)?;
-    } else {
-        wv.hide().map_err(err)?;
-        if let Some(main) = app.get_webview("main") {
-            let _ = main.set_focus(); // klavye kısayolları yeniden uygulamaya gelsin
+    #[cfg(target_os = "linux")]
+    {
+        // Ayrı pencere: konum/boyut kullanıcıda; sekmeye geçince pencere öne gelir, gizlenmez
+        let _ = (x, y, w, h, wv);
+        if visible {
+            raise(&app, &label);
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let err = |e: tauri::Error| format!("Web görünümü güncellenemedi: {e}");
+        if visible {
+            wv.set_position(LogicalPosition::new(x, y)).map_err(err)?;
+            wv.set_size(LogicalSize::new(w.max(1.0), h.max(1.0))).map_err(err)?;
+            wv.show().map_err(err)?;
+        } else {
+            wv.hide().map_err(err)?;
+            if let Some(main) = app.get_webview("main") {
+                let _ = main.set_focus(); // klavye kısayolları yeniden uygulamaya gelsin
+            }
         }
     }
     Ok(())
@@ -224,6 +293,12 @@ pub async fn web_nav(app: AppHandle, label: String, action: String) -> Result<()
 
 #[tauri::command]
 pub async fn web_close(app: AppHandle, label: String) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        if let (Ok(()), Some(win)) = (check_label(&label), app.get_window(&window_label(&label))) {
+            return win.destroy().map_err(|e| format!("Web penceresi kapatılamadı: {e}"));
+        }
+    }
     if let Ok(wv) = webview(&app, &label) {
         wv.close().map_err(|e| format!("Web sekmesi kapatılamadı: {e}"))?;
     }

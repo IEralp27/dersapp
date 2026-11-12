@@ -326,10 +326,16 @@ function pickVoice(l: Lang): { id: string | null; lang: string } {
 
 const noTurkish = () => sys().voicesReady() && !hasTurkish();
 
+/**
+ * Linux (WebKitGTK): sistem sesi (Web Speech) güvenilir değil, bazı dağıtımlarda uygulamayı çökertebiliyor.
+ * Orada listede sona konur ve başka motor hata verince sessizce sistem sesine düşülmez (Linux'ta asıl motor Piper).
+ */
+const LINUX = typeof navigator !== "undefined" && /linux/i.test(navigator.userAgent) && !/android/i.test(navigator.userAgent);
+
 /** Birinci motor: tarayıcının/sistemin kendi sesi. Ücretsiz, çevrimdışı; davranışı eskisiyle aynı. */
 registerEngine({
   id: SYSTEM,
-  order: 0,
+  order: LINUX ? 50 : 0,
   name: "Sistem sesi (ücretsiz, çevrimdışı)",
   description: "Bilgisayarında yüklü sesleri kullanır; internet ve ücret gerekmez. Ses kalitesi bilgisayarındaki seslere bağlıdır.",
   fields: [{
@@ -346,12 +352,15 @@ registerEngine({
   available: () => (sys().available() ? { ok: true } : {
     ok: false, reason: "Bu bilgisayarda sistem sesi desteklenmiyor. Başka bir seslendirici seç.",
   }),
-  notes: () => (noTurkish() ? [{
+  notes: () => [...(LINUX ? [{
+    warn: true,
+    text: "Linux'ta sistem sesi kararsız olabilir (uygulama kapanabilir). Piper önerilir.",
+  }] : []), ...(noTurkish() ? [{
     warn: true,
     text: "Bu bilgisayarda Türkçe ses yüklü değil, bu yüzden formüller ve Türkçe sözcükler yabancı aksanla okunur. "
       + "Windows Ayarları'nın dil (ya da konuşma) bölümünden Türkçe dil paketini konuşma özelliğiyle birlikte ekleyip uygulamayı "
       + "yeniden başlatırsan Türkçe ses burada görünür. O zamana kadar listedeki bir sesle okunur.",
-  }] : []),
+  }] : [])],
   create: () => sys(),
 });
 
@@ -463,7 +472,7 @@ function resolveSpeaker(): Speaker | null {
       if (sp.available()) return sp;
       reason = "Bu cihazda desteklenmiyor.";
     } else reason = a.reason;
-    if (sys().available()) {
+    if (!LINUX && sys().available()) {
       host?.toast(`${e.name} şu anda kullanılamıyor. ${reason} Bu okuma için sistem sesi kullanılıyor.`, "info");
       return sys();
     }
@@ -541,7 +550,7 @@ function speakCurrent(): void {
         // Seçili motor çalışırken hata verdi: nedenini söyle, bu okuma için sistem sesine düş
         sp.stop();
         const e = getEngine(settings.engine);
-        if (sys().available()) {
+        if (!LINUX && sys().available()) {
           host?.toast(`${e?.name ?? "Seslendirici"} hata verdi: ${msg} Bu okuma için sistem sesi kullanılıyor.`);
           speaker = sys();
           speakCurrent();

@@ -19,6 +19,9 @@ npm run tauri dev
 İlk çalıştırma Rust paketlerini indirip derlediği için 5-10 dakika sürebilir.
 Sonrakiler birkaç saniyede açılır.
 
+Linux (Arch/CachyOS) kaynaktan çalıştırırken ses için: `sudo pacman -S gst-plugins-base gst-plugins-good gst-plugin-pipewire`.
+Linux'ta web sekmeleri ayrı pencerede açılır; `WEBKIT_DISABLE_DMABUF_RENDERER=1` uygulama tarafından ayarlanır (`=0` verilirse dokunulmaz).
+
 ## Kurulum dosyası üretme
 
 ```

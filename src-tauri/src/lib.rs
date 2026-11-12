@@ -103,9 +103,22 @@ async fn cli_stop(runs: tauri::State<'_, cli::CliRuns>, run_id: String) -> Resul
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Linux (WebKitGTK): Arch/NVIDIA/Wayland'de DMA-BUF çizici sayfaları bozuk/boş çizebiliyor.
+    // Kullanıcı kendisi bir değer vermediyse kapat (açmak için: WEBKIT_DISABLE_DMABUF_RENDERER=0).
+    // Tauri ve GTK başlamadan, tek iş parçacığı varken ayarlanmalı.
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(cli::CliRuns::default())
+        // Ana pencere kapanınca uygulama kapansın (Linux'ta açık kalan web pencereleri süreci yaşatmasın)
+        .on_window_event(|window, event| {
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
+                window.app_handle().exit(0);
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             read_pdf, write_pdf, list_dir, load_state, save_state, load_notes, save_notes,
             mcp_take_requests, mcp_respond, mcp_context,

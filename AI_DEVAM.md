@@ -40,7 +40,7 @@ Kullanıcı hata çıktısı atarsa önce onu düzelt.
 - Gömülü çocuk webview (Tauri `unstable` özelliği, `Window::add_child`), `src-tauri/src/web.rs` + `src/web/`. Ayrı pencere yerine seçildi: sekme gibi davranır; konum `#web-area`'ya göre JS'ten verilir, başka sekmede gizlenir.
 - Güvenlik: Tauri 2.12 uzak adreslerden IPC'yi reddeder (capabilities'te `remote` yok); gezinme yalnızca http/https, localhost yasak. Google sayfasına betik yok (yalnızca geri/ileri için `history.back()`).
 - Windows'ta bak: Google girişi gömülü webview'da engelleniyor mu ("This browser or app may not be secure"; engellenirse sistem tarayıcısı + elle "Dosya ekle"), girişin kalıcılığı, webview'un konum/boyutu (DPI %125/150, panel açıp kapama, pencere büyütme), NotebookLM'in ses/video indirmesinin `medya/`ya düşüp PDF'e bağlanması (indirme kancası), Ctrl+V ile dosya yükleme, "Klasörde göster" (explorer /select), sürükle-bırak.
-- Bilinen: web sekmesi etkinken yüzen yapay zeka paneli/hesap makinesi webview'un altında kalır; odak webview'dayken Ctrl+W/Ctrl+Tab çalışmaz. Linux'ta çoklu webview konumlama zayıf olabilir.
+- Bilinen: web sekmesi etkinken yüzen yapay zeka paneli/hesap makinesi webview'un altında kalır; odak webview'dayken Ctrl+W/Ctrl+Tab çalışmaz. Linux'ta ayrı pencere kullanılıyor (aşağıya bak).
 - `cargo check` bu ortamda sahte pkg-config dosyalarıyla geçti (Linux hedefi); Windows'a özel satırlar (`explorer`, `rundll32`) derlenmedi.
 
 ## Kayıtlı ders (12 Kasım, `claude/ders-kaydi` dalı, gerçek cihazda denenmedi)
@@ -53,6 +53,12 @@ Kullanıcı hata çıktısı atarsa önce onu düzelt.
 - Panelde "NotebookLM metni" çipi -> pencere (liste + aralık + talimat + tahmin). `NBLM_SYSTEM_PROMPT`/`nblmRequest` (prompts.ts), saf mantık `src/ai/nblm.ts` (LaTeX -> düz metin, birleştirme, dosya adı, localStorage bağı), arayüz `nblm-ui.ts`. Dilim/ilerleme/iptal/dosya yazma kayıtlı dersle ortak (`planChunks`, `progressView`, `writeFile`/`exportFile`).
 - Çıktı yalnızca `.md` (`dersler/<kimlik>/<ad>-sA-B-notebooklm.md`; kayit.rs artık `[a-z0-9-]{1,80}.md` adını da kabul eder, yeni `kayit_path` komutu). PDF yok: jsPDF'te Türkçe harfli gömülü yazı tipi yok (KaTeX yazı tiplerinde ş ğ ı İ yok).
 - `media-ui.ts` artık birden çok ek bölüm alır; `sendToNotebookLm(file?)` (main.ts) .md yolunu da kopyalar. Hata olursa yarım iş yalnızca bellekte (uygulama kapanırsa kaybolur).
+
+## Linux düzeltmeleri (12 Kasım, `claude/linux-duzeltme` dalı; kullanıcı CachyOS'ta AppImage kullanıyor)
+- **Web sekmesi:** Linux'ta `add_child` webview'ları pencerenin GTK kutusuna diziliyor (tauri-runtime-wry 2.12.3 `build_gtk(default_vbox)`; wry belgesi: `build_as_child` Linux'ta yalnızca X11). Linux'ta her web sekmesi aynı `WebviewBuilder` ile ayrı pencerede (`<etiket>-pencere`); sekmeye geçince pencere öne gelir, sekme kapanınca pencere kapanır, pencere kapanınca `web-kapandi` olayıyla sekme kapanır. `web_open` artık `bool` (ayrı pencere mi) döndürür. Windows/macOS değişmedi. Ana pencere kapanınca uygulama çıkar.
+- **Ses çökmesi (doğrulandı, günlük: "autoaudiosink not found"):** `bundle.linux.appimage.bundleMediaFramework: true` + CI'da gstreamer1.0-plugins-base/good/libav/gl/pulseaudio. Kaynaktan: `sudo pacman -S gst-plugins-base gst-plugins-good gst-plugin-pipewire`. Linux'ta sistem sesi listede sona kondu, hata olunca ona sessizce düşülmez (asıl motor Piper).
+- **PDF sayfaları bozuk (doğrulanmadı):** Linux'ta `WEBKIT_DISABLE_DMABUF_RENDERER=1` (kullanıcı ayarlamadıysa; `lib.rs` `run()`). Günlük gelince doğrula.
+- Linux'ta yalnızca sahte pkg-config ile `cargo check` yapıldı; gerçek derleme CI'da.
 
 ## Bilinen eksikler / sıradaki fikirler
 - **Yeni ses motorları (kullanıcı istedi):** Google Cloud TTS, Azure (Microsoft) ve ElevenLabs için birer motor dosyası (`src/ai/tts-<ad>.ts`, `registerEngine` + `BytesSpeaker`; adımlar `tts.ts` başındaki yorumda). Her birinin kendi anahtar alanı ayarlarda olsun. Şu an ayarlardan yalnızca OpenAI uyumlu servisler ("Özel" sağlayıcı) eklenebiliyor. Güncel API biçimlerini resmi dokümandan doğrula.
