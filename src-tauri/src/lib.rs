@@ -1,4 +1,5 @@
 mod cli;
+mod piper;
 mod store;
 
 use std::path::PathBuf;
@@ -107,7 +108,8 @@ pub fn run() {
             read_pdf, write_pdf, list_dir, load_state, save_state, load_notes, save_notes,
             mcp_take_requests, mcp_respond, mcp_context,
             load_profile, save_profile, profile_path,
-            cli_prepare, cli_start, cli_stop
+            cli_prepare, cli_start, cli_stop,
+            piper::piper_status, piper::piper_install, piper::piper_synthesize, piper::piper_remove
         ])
         .run(tauri::generate_context!())
         .expect("uygulama başlatılamadı");

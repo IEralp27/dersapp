@@ -53,7 +53,14 @@ Claude Desktop, Claude Code, Gemini CLI gibi uygulamalar DersApp'e bağlanıp a�
 - `src-tauri/` Rust tarafı
   - `src/store.rs` dosya okuma, klasör listeleme, ayar ve not kaydı
   - `src/cli.rs` Claude Code CLI sürecini başlatma/durdurma
+  - `src/piper.rs` Piper sesi: ilk kullanımda indirme (onaylı, doğrulamalı), metni WAV'a çevirme
   - `src/lib.rs` arayüzün çağırdığı komutlar
+
+## Sesli okuma (Piper)
+
+İlk sesli okumada seslendirici seçim kutusu açılır: her sesi dinleyip birini seçersin (sonra ayarlardan değişir).
+Piper ücretsiz ve çevrimdışıdır; seçilince program ve Türkçe ses (yaklaşık 85 MB) onayınla bir kez veri klasörüne
+indirilir. Motor dosyası `src/ai/tts-piper.ts`; Rust testleri `src-tauri/src/piper.rs` içinde (`cargo test`).
 
 ## Kısayollar
 

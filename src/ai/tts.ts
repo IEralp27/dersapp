@@ -17,6 +17,9 @@ import type { Lang, Segment } from "./tts-text";
 import { getEngine, listEngines, registerEngine } from "./tts-engine";
 import type { Avail, EngineConfig, SpeakEvents, SpeakOpts, Speaker, TtsEngine, VoiceInfo } from "./tts-engine";
 import "./tts-cloud";
+import "./tts-piper";
+import { SYSTEM, chooseEngine, clampRate, needsChooser, parseSettings } from "./tts-settings";
+import type { TtsSettings } from "./tts-settings";
 import { learnerTts } from "./learner-ui";
 
 export type { Avail, EngineConfig, SpeakEvents, SpeakOpts, Speaker, TtsEngine, VoiceInfo };
@@ -177,43 +180,15 @@ class WebSpeechSpeaker implements Speaker {
 
 // ================================================================ Ayarlar
 
-interface TtsSettings {
-  /** Seçili seslendirme motorunun kimliği */
-  engine: string;
-  /** Motor başına ayarlar (sistem sesinde voice: "" = otomatik, Türkçe ses varsa o) */
-  cfg: Record<string, EngineConfig>;
-  rate: number;
-  auto: boolean;
-}
-
-const SYSTEM = "system";
-
 const KEY = "dersapp.ai.tts";
 const RATES = [0.75, 1, 1.25, 1.5];
-const clampRate = (r: number) => Math.min(1.5, Math.max(0.75, Math.round((Number(r) || 1) * 20) / 20));
 
 function loadSettings(): TtsSettings {
-  const d: TtsSettings = { engine: SYSTEM, cfg: {}, rate: 1, auto: false };
   try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) {
-      const o = JSON.parse(raw);
-      const cfg: Record<string, EngineConfig> = {};
-      if (o.cfg && typeof o.cfg === "object") {
-        for (const [id, c] of Object.entries(o.cfg as Record<string, unknown>)) {
-          if (!c || typeof c !== "object") continue;
-          cfg[id] = {};
-          for (const [k, v] of Object.entries(c as Record<string, unknown>)) if (typeof v === "string") cfg[id][k] = v;
-        }
-      }
-      // eski sürüm: ses seçimi en üst düzeyde saklanıyordu
-      if (typeof o.voice === "string" && cfg[SYSTEM]?.voice === undefined) cfg[SYSTEM] = { ...cfg[SYSTEM], voice: o.voice };
-      return { engine: typeof o.engine === "string" && o.engine ? o.engine : SYSTEM, cfg, rate: clampRate(o.rate), auto: o.auto === true };
-    }
+    return parseSettings(localStorage.getItem(KEY));
   } catch {
-    // varsayılanlar
+    return parseSettings(null);
   }
-  return d;
 }
 
 const cfgOf = (id: string): EngineConfig => (settings.cfg[id] ??= {});
@@ -228,6 +203,8 @@ export interface TtsTurn {
   body?: HTMLElement;
   /** "Sesi dene" örneği: panelde görünmez, bağlı olmasa da durdurulmaz */
   sample?: boolean;
+  /** Seçim kutusundaki "Dinle" örneği: hata olursa sistem sesine düşmez */
+  preview?: boolean;
 }
 
 interface Host {
@@ -247,6 +224,12 @@ let speaker: Speaker;
 const speakers = new Map<string, Speaker>();
 const avail = new Map<string, Avail>();
 let settings: TtsSettings = loadSettings();
+/** İlk okumadaki seslendirici seçim kutusu */
+let chooser: HTMLElement | null = null;
+/** Seçim yapılınca okunacak yanıt */
+let pending: { t: TtsTurn; from: number } | null = null;
+/** "Dinle" sırasında seçili motor yerine kullanılan motor */
+let previewId: string | null = null;
 let state: State = "idle";
 let turn: TtsTurn | null = null;
 let segs: Segment[] = [];
@@ -469,7 +452,7 @@ function highlight(i: number): void {
 
 /** Seçili motorun Speaker'ı; kullanılamıyorsa nedenini söyleyip sistem sesine düşer. Hiçbiri yoksa null. */
 function resolveSpeaker(): Speaker | null {
-  const e = getEngine(settings.engine) ?? getEngine(SYSTEM)!;
+  const e = getEngine(previewId ?? settings.engine) ?? getEngine(SYSTEM)!;
   let reason = "";
   if (e.id !== SYSTEM) {
     const a = e.available();
@@ -493,6 +476,8 @@ function resolveSpeaker(): Speaker | null {
 
 function play(t: TtsTurn, from = 0): void {
   if (!host) return;
+  // Kullanıcı henüz ses seçmediyse sistem sesiyle sessizce başlama: önce seçtir
+  if (!t.sample && needsChooser(settings)) return openChooser(t, from);
   stop(true);
   const sp = resolveSpeaker();
   if (!sp) return;
@@ -546,6 +531,11 @@ function speakCurrent(): void {
         return;
       }
       if (state !== "playing") return;
+      if (turn?.preview) {
+        host?.toast(`Bu ses çalınamadı: ${msg}`);
+        stop();
+        return;
+      }
       if (sp !== system) {
         // Seçili motor çalışırken hata verdi: nedenini söyle, bu okuma için sistem sesine düş
         sp.stop();
@@ -760,6 +750,7 @@ function refreshAvail(): void {
       a.then((r) => {
         avail.set(e.id, r);
         if (pop) fillPop();
+        if (chooser) fillChooser();
       }, () => avail.set(e.id, { ok: false, reason: "Kullanılabilirlik denetlenemedi." }));
     }
   }
@@ -803,7 +794,7 @@ function fillPop(force = false): void {
     r.disabled = !a.ok; // kullanılamayan seçilemez
     r.addEventListener("change", () => {
       if (!r.checked) return;
-      settings.engine = e.id;
+      chooseEngine(settings, e.id);
       saveSettings();
       if (state !== "idle") stop();
       fillPop(true);
@@ -941,6 +932,102 @@ function fillPop(force = false): void {
   if (hadFocus) (pop.querySelector(`[data-k="${hadFocus}"]`) as HTMLElement | null)?.focus();
 }
 
+// ================================================================ İlk seçim
+
+/** İlk sesli okumada bir kez: her motoru dinletip kullanıcıya seçtirir. Seçim ayarlardan değiştirilebilir. */
+function openChooser(t: TtsTurn | null, from = 0): void {
+  if (!host) return;
+  pending = t ? { t, from } : null;
+  closePop();
+  if (!chooser) {
+    chooser = document.createElement("div");
+    chooser.className = "tts-pop tts-choose";
+    chooser.setAttribute("role", "dialog");
+    chooser.setAttribute("aria-label", "Okuma sesini seç");
+    chooser.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        closeChooser();
+      }
+    });
+    host.panel.append(chooser);
+  }
+  refreshAvail();
+  fillChooser();
+  (chooser.querySelector("button.tts-test:not(:disabled)") as HTMLElement | null)?.focus();
+}
+
+function closeChooser(): void {
+  if (turn?.preview) stop();
+  chooser?.remove();
+  chooser = null;
+  pending = null;
+}
+
+function fillChooser(): void {
+  if (!chooser || !host) return;
+  chooser.replaceChildren();
+  const head = document.createElement("div");
+  head.className = "tts-pop-head";
+  const h = document.createElement("b");
+  h.textContent = "Okuma sesini seç";
+  head.append(h, btn("Kapat", ICONS.close, closeChooser));
+  const intro = document.createElement("p");
+  intro.className = "tts-help dim";
+  intro.textContent = "Her sesi bir kez dinle, beğendiğini seç. Sonra oynatıcıdaki ses ayarlarından değiştirebilirsin.";
+  chooser.append(head, intro);
+  for (const e of listEngines()) {
+    const a = availOf(e);
+    const row = document.createElement("div");
+    row.className = "tts-eng tts-pick" + (a.ok ? "" : " tts-off");
+    const text = document.createElement("span");
+    const name = document.createElement("b");
+    name.textContent = e.name;
+    const desc = document.createElement("small");
+    desc.textContent = e.description;
+    text.append(name, desc);
+    if (!a.ok) {
+      const why = document.createElement("small");
+      why.className = "tts-why";
+      why.textContent = "Kullanılamıyor: " + a.reason;
+      text.append(why);
+    }
+    const acts = document.createElement("div");
+    acts.className = "tts-acts";
+    const listen = document.createElement("button");
+    listen.type = "button";
+    listen.className = "tts-test";
+    listen.textContent = "Dinle";
+    listen.disabled = !a.ok;
+    listen.addEventListener("click", () => {
+      previewId = e.id;
+      try {
+        play({ text: SAMPLE, el: document.createElement("div"), sample: true, preview: true });
+      } finally {
+        previewId = null;
+      }
+    });
+    const pick = document.createElement("button");
+    pick.type = "button";
+    pick.className = "tts-test tts-primary";
+    pick.textContent = "Bunu seç";
+    pick.disabled = !a.ok;
+    pick.addEventListener("click", () => {
+      chooseEngine(settings, e.id);
+      saveSettings();
+      const p = pending;
+      closeChooser();
+      if (p && p.t.el.isConnected) play(p.t, p.from);
+    });
+    acts.append(listen, pick);
+    row.append(text, acts);
+    chooser.append(row);
+  }
+  const bottom = host.compose.offsetHeight + (bar.hidden ? 0 : bar.offsetHeight) + 6;
+  chooser.style.bottom = bottom + "px";
+  chooser.style.maxHeight = Math.max(160, host.panel.clientHeight - bottom - 8) + "px";
+}
+
 function lastTurn(): TtsTurn | null {
   if (!host) return null;
   const els = [...host.main.querySelectorAll<HTMLElement>(".ai-turn.ai-assistant")].reverse();
@@ -1007,6 +1094,10 @@ export function ttsUsable(): boolean {
 
 /** Bir yanıtı kancalarla okur (from: başlanacak cümle). Okuma başlayamadıysa false. */
 export function ttsPlay(t: TtsTurn, h: PlayHooks, from = 0): boolean {
+  if (needsChooser(settings)) {
+    openChooser(null); // ders sessiz sürer; seçimden sonra okuma düğmesiyle sesli devam edilir
+    return false;
+  }
   play(t, from);
   if (turn !== t || state === "idle") return false;
   hooks = h;
