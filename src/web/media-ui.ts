@@ -17,6 +17,18 @@ let host: MediaHost;
 let pop: HTMLElement;
 let player: { el: HTMLMediaElement; url: string; path: string } | null = null;
 
+/** Listeye eklenen ek bölüm (kayıtlı dersler, ai/recording-ui.ts): sayaç ve içerik */
+export interface MediaExtra {
+  count(pdf: string): number;
+  render(pdf: { path: string; name: string }, close: () => void): HTMLElement | null;
+}
+let extra: MediaExtra | null = null;
+
+export function setMediaExtra(x: MediaExtra): void {
+  extra = x;
+  if (host) refreshMedia();
+}
+
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = "", text = ""): HTMLElementTagNameMap[K] {
@@ -76,6 +88,8 @@ function renderPop(): void {
   const keep = player && items.some((m) => m.path === player!.path) ? player.el : null;
   if (!keep) stopPlayer();
   pop.replaceChildren();
+  const more = extra?.render(pdf, closePop) ?? null;
+  if (more) pop.append(more);
   pop.append(el("h3", "", "Ses/Video özetleri"));
   if (!items.length) {
     pop.append(el("p", "media-empty",
@@ -118,7 +132,7 @@ function closePop(): void {
 /** Sayaç ve (açıksa) liste yeniden çizilir; sekme değişince ve indirme bitince çağrılır. */
 export function refreshMedia(): void {
   const pdf = host?.current();
-  const count = pdf ? mediaStore.list(pdf.path).length : 0;
+  const count = pdf ? mediaStore.list(pdf.path).length + (extra?.count(pdf.path) ?? 0) : 0;
   const badge = document.getElementById("media-count")!;
   badge.hidden = count === 0;
   badge.textContent = String(count);

@@ -1,0 +1,43 @@
+/* Kayıtlı ders: pencere listesi ve oynatıcı */
+.rec-chip svg { width: 13px; height: 13px; vertical-align: -2px; margin-right: 4px; fill: none; stroke: currentColor; stroke-width: 2; }
+.rec-sub { margin: 10px 0 6px; font-weight: 600; }
+.rec-list { list-style: none; margin: 0 0 8px; padding: 0; }
+.rec-item { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.rec-head { display: flex; flex-direction: column; gap: 2px; }
+.rec-head b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rec-dim { color: var(--dim); font-size: 12px; }
+.rec-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.rec-btn { padding: 3px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--raised); color: var(--fg); cursor: pointer; }
+.rec-btn.primary { border-color: var(--accent); color: var(--accent); }
+.rec-btn.danger { color: var(--danger); }
+.rec-select, .rec-instr {
+  width: 100%; box-sizing: border-box; padding: 6px 8px; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: inherit;
+}
+.rec-instr { resize: vertical; min-height: 44px; }
+.rec-est { margin: 8px 0; color: var(--dim); line-height: 1.45; }
+.rec-est.bad { color: var(--danger); }
+.rec-media { margin-bottom: 10px; }
+
+.rec-player {
+  position: fixed; right: 16px; bottom: 16px; z-index: 30;
+  width: 380px; max-width: calc(100vw - 32px); max-height: 60vh;
+  display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px #000a;
+}
+.rec-p-head { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.rec-p-head b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rec-p-list { list-style: none; margin: 0; padding: 4px 6px; overflow: auto; flex: 1; min-height: 60px; }
+.rec-player.compact .rec-p-list { display: none; }
+.rec-p-item { padding: 6px 8px; border-radius: 6px; cursor: pointer; line-height: 1.45; }
+.rec-p-item:hover { background: var(--raised); }
+.rec-p-item.on { background: #e0338a24; box-shadow: inset 3px 0 0 #e0338a; }
+.rec-p-page { display: block; color: var(--dim); font-size: 11px; }
+.rec-p-text p { margin: 0; }
+.rec-p-ctl { display: flex; align-items: center; gap: 4px; padding: 6px 10px 2px; border-top: 1px solid var(--line); }
+.rec-p-seek { flex: 1; min-width: 60px; accent-color: var(--accent); }
+.rec-p-rate { padding: 2px 4px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+.rec-p-time { padding: 0 10px 8px; color: var(--dim); font-size: 11px; }
+.rec-ibtn { display: inline-grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 6px; background: none; color: var(--fg); cursor: pointer; }
+.rec-ibtn:hover { background: var(--raised); }
+.rec-ibtn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }

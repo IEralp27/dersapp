@@ -1,5 +1,6 @@
 // Seslendirme motorlarının ortak arayüzü ve kayıt defteri. DOM'a bağımlı değildir (node ile sınanır).
 // Yeni motor ekleme adımları tts.ts'in başındaki yorumda.
+import type { ClipProvider } from "./tts-audio";
 
 export interface VoiceInfo {
   id: string;
@@ -72,6 +73,11 @@ export interface TtsEngine {
   notes?(): { text: string; warn?: boolean }[];
   /** Seçili motor için Speaker üretir. getCfg her çağrıda güncel ayarı verir; Speaker bir kez üretilir. */
   create(getCfg: () => EngineConfig): Speaker;
+  /**
+   * İsteğe bağlı: ses baytı üreten motorlar için ClipProvider (kayıtlı ders sesi bununla üretilir).
+   * Olmayan motorlar (sistem sesi) kayıt yapamaz.
+   */
+  clips?(getCfg: () => EngineConfig): ClipProvider;
 }
 
 const registry: TtsEngine[] = [];

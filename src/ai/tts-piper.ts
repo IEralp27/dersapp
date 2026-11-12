@@ -157,4 +157,5 @@ registerEngine({
     return [{ text: `Henüz indirilmedi: ilk okumada onayın istenir (yaklaşık ${mb(status.downloadBytes)}).` }];
   },
   create: () => new BytesSpeaker("piper", () => provider),
+  clips: () => provider,
 });

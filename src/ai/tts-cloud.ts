@@ -53,44 +53,47 @@ registerEngine({
     return n;
   },
   create(getCfg) {
-    const provider = (): ClipProvider => {
-      const r = resolve(getCfg());
-      const url = speechUrl(r.c.baseUrl);
-      return {
-        key: (text) => ["cloud", r.c.baseUrl, r.model, r.voice, text].join("\u0001"),
-        async fetch(text, signal) {
-          const headers: Record<string, string> = { "Content-Type": "application/json" };
-          if (r.c.key.trim()) headers.Authorization = "Bearer " + r.c.key.trim();
-          let res: Response;
-          try {
-            res = await fetch(url, { method: "POST", headers, body: speechBody(r.model, r.voice, text), signal });
-          } catch (e) {
-            if (signal.aborted) throw e;
-            throw new Error(speechNetworkError(r.c.baseUrl));
-          }
-          if (!res.ok) {
-            let body = "";
-            try {
-              body = await res.text();
-            } catch {
-              // gövde okunamadı
-            }
-            throw new Error(speechHttpError(res.status, body));
-          }
-          const type = res.headers.get("content-type") ?? "";
-          if (!isAudioType(type)) throw new Error(speechNotAudio(type));
-          let bytes: ArrayBuffer;
-          try {
-            bytes = await res.arrayBuffer();
-          } catch (e) {
-            if (signal.aborted) throw e;
-            throw new Error(speechNetworkError(r.c.baseUrl));
-          }
-          if (!bytes.byteLength) throw new Error("Sağlayıcı boş bir ses döndürdü. Model ve ses adını kontrol edip yeniden dene.");
-          return { bytes, mime: type.split(";")[0].trim() || "audio/mpeg" };
-        },
-      };
-    };
-    return new BytesSpeaker("cloud", provider);
+    return new BytesSpeaker("cloud", () => cloudProvider(getCfg));
   },
+  clips: (getCfg) => cloudProvider(getCfg),
 });
+
+/** Kayıt ve okuma için ortak ses kaynağı (ayar her çağrıda güncel okunur) */
+function cloudProvider(getCfg: () => EngineConfig): ClipProvider {
+  const r = resolve(getCfg());
+  const url = speechUrl(r.c.baseUrl);
+  return {
+    key: (text) => ["cloud", r.c.baseUrl, r.model, r.voice, text].join("\u0001"),
+    async fetch(text, signal) {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (r.c.key.trim()) headers.Authorization = "Bearer " + r.c.key.trim();
+      let res: Response;
+      try {
+        res = await fetch(url, { method: "POST", headers, body: speechBody(r.model, r.voice, text), signal });
+      } catch (e) {
+        if (signal.aborted) throw e;
+        throw new Error(speechNetworkError(r.c.baseUrl));
+      }
+      if (!res.ok) {
+        let body = "";
+        try {
+          body = await res.text();
+        } catch {
+          // gövde okunamadı
+        }
+        throw new Error(speechHttpError(res.status, body));
+      }
+      const type = res.headers.get("content-type") ?? "";
+      if (!isAudioType(type)) throw new Error(speechNotAudio(type));
+      let bytes: ArrayBuffer;
+      try {
+        bytes = await res.arrayBuffer();
+      } catch (e) {
+        if (signal.aborted) throw e;
+        throw new Error(speechNetworkError(r.c.baseUrl));
+      }
+      if (!bytes.byteLength) throw new Error("Sağlayıcı boş bir ses döndürdü. Model ve ses adını kontrol edip yeniden dene.");
+      return { bytes, mime: type.split(";")[0].trim() || "audio/mpeg" };
+    },
+  };
+}

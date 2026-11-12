@@ -52,6 +52,8 @@ interface DocState {
   hidden: boolean;
   /** Konuşmadaki en son görüntünün yeri (takip sorularında işaretler buna göre) */
   region: Region | null;
+  /** Kayıtlı ders oynatıcısının o anki işaretleri (konuşmaya bağlı değil) */
+  player?: AiGroup | null;
 }
 
 const SETTING_KEY = "dersapp.ai.marks";
@@ -241,7 +243,8 @@ function sync(path: string): void {
     // Bağımsız tahtada layer(true) ile layer(false) aynı görünümdür: iki grubu birlikte ver
     const list = st.groups.filter((g) => g.board === board || (view.boardOnly && !board));
     const groups: AiGroup[] = list.map((g) => ({ id: g.id, page: g.page, marks: g.marks }));
-    pv.ai.set(groups, st.focus, st.hidden);
+    if (st.player && !board) groups.push(st.player);
+    pv.ai.set(groups, st.player && !board ? st.player.id : st.focus, st.hidden && !(st.player && !board));
     pv.ai.onMarkClick = (gid, n) => onBadge(path, gid, n);
   }
   for (const g of st.groups) renderBar(g, st);
@@ -567,6 +570,25 @@ export function showExternalMarks(path: string, name: string, region: Region, ma
   host.appendNotice(path, name, card);
   const g = addGroup(path, region, marks, card, body);
   reveal(g, null); // sayfa ekranda değilse oraya git
+}
+
+/**
+ * Kayıtlı ders oynatıcısı: o an okunan parçanın işaretlerini PDF sayfasında gösterir (normalize koordinatlar,
+ * rect: sayfanın tamamı, sayfa biriminde). marks boş ya da null: kaldırır. Konuşmadaki işaretlere dokunmaz.
+ */
+export function showPlayerMarks(path: string, page: number, rect: PageRect | null, marks: Mark[] | null): void {
+  const st = stateOf(path);
+  const next = marks?.length && rect
+    ? { id: "kayit", page, marks: marks.map((m) => toPage(m, rect)).map((m) => ({ kind: m.kind, p: m.p, n: m.n, note: m.note })) }
+    : null;
+  if (!next && !st.player) return;
+  st.player = next;
+  sync(path);
+  if (next) {
+    const view = PdfView.byPath(path);
+    const pv = layerOf(path, false);
+    if (view && pv && view.current === pv) pv.ai.reveal(next.id, null);
+  }
 }
 
 export function initMarks(h: MarksHost): void {

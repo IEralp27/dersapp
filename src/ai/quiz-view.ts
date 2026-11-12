@@ -210,11 +210,17 @@ export function closeDialog(): void {
 }
 
 function openDialog(mode: Mode): void {
+  if (!openStudyDialog(mode === "quiz" ? "Test hazırla" : mode === "summary" ? "Özet PDF'i" : "Testlerim")) return;
+  showMode(mode);
+}
+
+/** Boş bir çalışma penceresi açar (içeriği card() ile doldurulur; kayıtlı ders de kullanır). Açılamazsa false. */
+export function openStudyDialog(what: string): boolean {
   const cur = host.current();
-  if (!cur) return;
-  if (job) return; // hazırlanırken açık kalır
+  if (!cur) return false;
+  if (job) return false; // hazırlanırken açık kalır
   closeDialog();
-  host.beforeJob?.(mode === "quiz" ? "Test hazırla" : mode === "summary" ? "Özet PDF'i" : "Testlerim");
+  host.beforeJob?.(what);
   dialog = el("div", "qz-dialog");
   dialog.setAttribute("role", "dialog");
   dialog.addEventListener("keydown", (e) => {
@@ -225,7 +231,7 @@ function openDialog(mode: Mode): void {
     if (e.target === dialog && !job) closeDialog();
   });
   host.panel.append(dialog);
-  showMode(mode);
+  return true;
 }
 
 export function card(title: string, mode: Mode | null): { box: HTMLElement; body: HTMLElement } {

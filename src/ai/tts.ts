@@ -20,6 +20,7 @@ import "./tts-cloud";
 import "./tts-piper";
 import { SYSTEM, chooseEngine, clampRate, needsChooser, parseSettings } from "./tts-settings";
 import type { TtsSettings } from "./tts-settings";
+import type { ClipProvider } from "./tts-audio";
 import { learnerTts } from "./learner-ui";
 
 export type { Avail, EngineConfig, SpeakEvents, SpeakOpts, Speaker, TtsEngine, VoiceInfo };
@@ -1132,4 +1133,37 @@ export function ttsAttach(tools: HTMLElement, t: TtsTurn, auto = true): void {
   // Durdurulmuş (yarım) yanıtlar otomatik okunmaz
   const stopped = !!t.el.querySelector(":scope > .ai-note");
   if (auto && settings.auto && !stopped && !host.panel.hidden && t.el.isConnected) play(t);
+}
+
+// ================================================================ Kayıtlı ders (recording-ui.ts)
+
+/** Ses baytı üretebilen (kayıt yapabilen) motorlar; seçili olan başta. */
+export function ttsRecorders(): { id: string; name: string; selected: boolean }[] {
+  return listEngines()
+    .filter((e) => typeof e.clips === "function")
+    .map((e) => ({ id: e.id, name: e.name, selected: e.id === settings.engine }))
+    .sort((a, b) => Number(b.selected) - Number(a.selected));
+}
+
+/** Seçili motorun adı ve kayıt yapıp yapamayacağı */
+export function ttsSelected(): { id: string; name: string; canRecord: boolean } {
+  const e = getEngine(settings.engine) ?? getEngine(SYSTEM)!;
+  return { id: e.id, name: e.name, canRecord: typeof e.clips === "function" };
+}
+
+/** Kayıt için motorun ses kaynağı ve kullanılabilirliği; motor kayıt yapamıyorsa Türkçe nedeni. */
+export async function ttsRecorder(id: string): Promise<{ name: string; clips: ClipProvider } | { error: string }> {
+  const e = getEngine(id);
+  if (!e) return { error: "Seslendirici bulunamadı." };
+  if (!e.clips) {
+    return { error: `"${e.name}" ses dosyası üretemiyor (sistem sesi yalnızca hoparlörden okur), bu yüzden kayıt yapılamaz. Piper ya da OpenAI uyumlu ses seç.` };
+  }
+  const a = await e.available();
+  if (!a.ok) return { error: `${e.name}: ${a.reason}` };
+  return { name: e.name, clips: e.clips(() => cfgOf(id)) };
+}
+
+/** Okunacak metni hazırlar (formüller doğal Türkçe okunur): Markdown + LaTeX -> düz konuşma metni. */
+export function ttsSpeechText(markdown: string, l?: Lang): string {
+  return toSpeech(markdown, l ?? guessLang(markdown)).map((s) => s.text.replaceAll(OBJ, " ")).join(" ").replace(/\s+/g, " ").trim();
 }

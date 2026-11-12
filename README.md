@@ -41,6 +41,13 @@ PDF sekmesinde "NotebookLM'e gönder": NotebookLM'i açar, PDF yolunu panoya kop
 NotebookLM'den indirilen ses/video veri klasöründeki `medya/` klasörüne yazılır ve PDF'e bağlanır (kulaklık düğmesi; "Dosya ekle" ile elle de eklenir).
 Yapay zeka panelindeki "Bu sayfayı anlat" web sekmesinde sayfa metnini kullanır (giriş gerektiren sayfalar okunamaz).
 
+## Kayıtlı ders
+
+Yapay zeka panelinde "Ders kaydı": sayfa aralığı, tempo ve isteğe bağlı talimat ("sınava yönelik anlat", "10 dakikayı geçmesin") seç.
+Yapay zeka metni 3'er sayfalık bölümlerle bir kez yazar, Piper ya da bulut sesi okur; kayıt sonra internetsiz ve ücretsiz oynatılır
+(sayfaya gider, işaretleri gösterir, okunan cümle listede vurgulanır; hız, sarma, cümleye tıklama). Yarım kalan kayıt listeden sürdürülür.
+Dosyalar veri klasöründe `dersler/<kimlik>/` (`ders.md`, `ses.wav`, `kayit.json`); listeden .md ve ses dışa aktarılır. Sistem sesi kayıt yapamaz.
+
 ## Kendi yapay zeka uygulamanı bağlama (MCP)
 
 Claude Desktop, Claude Code, Gemini CLI gibi uygulamalar DersApp'e bağlanıp açık PDF'i okuyabilir ve test gönderebilir. Kurulum: `docs/MCP.md`.
@@ -55,6 +62,7 @@ Claude Desktop, Claude Code, Gemini CLI gibi uygulamalar DersApp'e bağlanıp a�
   - `calc.ts`, `calc-engine.ts` hesap makinesi (`node src/calc-engine.test.ts` ile test)
   - `ai/` yapay zeka paneli; öğretme talimatı `ai/prompts.ts` içinde; sağlayıcılar `ai/providers.ts`, Claude Code CLI `ai/cli-run.ts` + `ai/cli-stream.ts`
   - `exams.ts` sınav takvimi
+  - `ai/recording.ts` + `ai/wav.ts` kayıtlı ders mantığı (`node src/ai/recording.test.ts`), `recording-ui.ts` pencere/üretim, `recording-player.ts` oynatıcı
   - `web/` web sekmesi: `url.ts` adres denetimi, `media-store.ts` ses/video ↔ PDF bağı, `html-text.ts` sayfa metni (`node src/web/web.test.ts`), `media-ui.ts` liste/oynatıcı
   - `mcp.ts` MCP köprüsü (bağlı yapay zekadan gelen istekleri işler)
   - `backend.ts` Rust tarafına köprü
@@ -63,6 +71,7 @@ Claude Desktop, Claude Code, Gemini CLI gibi uygulamalar DersApp'e bağlanıp a�
   - `src/store.rs` dosya okuma, klasör listeleme, ayar ve not kaydı
   - `src/cli.rs` Claude Code CLI sürecini başlatma/durdurma
   - `src/piper.rs` Piper sesi: ilk kullanımda indirme (onaylı, doğrulamalı), metni WAV'a çevirme
+  - `src/kayit.rs` kayıtlı ders dosyaları (`dersler/` klasörü)
   - `src/web.rs` web sekmesi (gömülü webview, indirmeler, sayfa metni indirme)
   - `src/lib.rs` arayüzün çağırdığı komutlar
 

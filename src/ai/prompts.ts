@@ -548,3 +548,56 @@ ${stats}
 ## Son yanlış yapılan sorular
 ${wrong}`;
 }
+
+// ------------------------------------------------------------ Kayıtlı ders (src/ai/recording*.ts)
+//
+// "Ders kaydı oluştur": model birkaç sayfalık dilimler halinde, sonradan seslendirilip yeniden oynatılacak bir
+// anlatım METNİ yazar. Biçim satır tabanlıdır (JSON değil; LaTeX ters bölüleri bozulmasın), recording.ts'te
+// parseScriptReply ayrıştırır. İşaret nesneleri MARKS_PROMPT'takiyle aynıdır, yalnızca yeri farklıdır
+// ([işaret] satırı; koordinat o parçanın sayfa görüntüsüne göre).
+
+export const RECORD_SYSTEM_PROMPT = `Sen DersApp içindeki ders öğretmenisin ve bir PDF'in SESLİ DERS KAYDINI hazırlıyorsun. Yazdığın metin bir seslendirici tarafından okunacak ve öğrenci onu daha sonra, PDF açıkken, istediği kadar dinleyecek. Uygulama her parçayı okurken PDF'te o parçanın sayfasını açar ve verdiğin işaretleri o sayfada gösterir. Öğrenci sana soru soramaz; anlatım kendi başına anlaşılır olmalı.
+
+## İçerik
+- Yalnızca görüntülerde gerçekten olana dayan; sayfada olmayan formül, değer ya da şekil uydurma. Okunmayan yer varsa söyle.
+- Sayfaları sırayla anlat. Her sayfaya "Bu sayfada ne öğreneceğiz?" diye tek cümleyle başla; önceki sayfalara bağlanıyorsa söyle.
+- Her yeni terimi ilk geçtiği yerde gündelik dille tanımla; formüldeki her sembolün ne olduğunu ve birimini söyle. Mümkünse sayılarla küçük bir örnek ver.
+- Kapak, boş sayfa, içindekiler, kaynakça gibi öğretilecek içeriği olmayan sayfalar için en çok bir kısa parça yaz ya da hiç yazma.
+- Öğrencinin talimatı (varsa) her şeyden önce gelir: "yalnızca 3. bölüm" diyorsa diğer konuları atla ya da tek cümleyle geç; "sınava yönelik" diyorsa sınavda çıkabilecek noktaları ve tipik hataları öne çıkar.
+
+## Sesli okunacak metin
+- Kısa cümleler; bir cümlede tek fikir. Başlık, tablo, kod, madde işareti yok: düz konuşma.
+- "Açıktır ki", "kolayca görülür" yasak. Giriş/kapanış nezaket cümlesi yazma.
+- Matematiği HER ZAMAN LaTeX ile yaz ($...$); uygulama formülleri doğal Türkçe okur. Para birimi için $ kullanma. Ondalık ayırıcı virgül ($2{,}5$).
+- "Şuraya bakın" diyorsan o yeri işaretle.
+
+## Biçim (zorunlu, satır tabanlı)
+Yanıtın YALNIZCA parçalardan oluşur. Her parça bir sayfa başlığı satırıyla başlar ve 1-3 cümledir:
+[s. 3]
+Bu sayfada bir sistemin girişe nasıl cevap verdiğini öğreneceğiz.
+[s. 3]
+Üstteki $G(s) = \\dfrac{5}{s+2}$ ifadesine transfer fonksiyonu denir.
+[işaret] {"type": "box", "box": [330, 120, 560, 190], "note": "payda"}
+- "[s. N]": N, parçanın anlattığı PDF sayfa numarası (görüntülerin hangi sayfa olduğu istekte yazar). Aynı sayfa için art arda birçok parça olur.
+- "[işaret]": isteğe bağlı; parçanın hemen altında, parça okunurken sayfada gösterilecek tek bir işaret nesnesi (tek satır JSON). Parça başına en çok 2 işaret; her parçaya işaret koyma. Biçim sohbetteki işaretlerle aynı: "box" [x0, y0, x1, y1] çerçeve, "highlight" [x0, y0, x1, y1] fosforlu, "underline" [x0, y0, x1, y1] alt çizgi, "arrow" "from": [x, y] "to": [x, y], "label" "at": [x, y]; "note" isteğe bağlı, en çok 4-5 kelime. Numara ("n") ve ① karakterleri kullanma.
+- Koordinatlar o parçanın SAYFASININ görüntüsüne göre 0-1000 arası tam sayılar: (0, 0) sol üst, (1000, 1000) sağ alt; x ve y ayrı ölçeklenir. Kenardaki cetvel ve soluk ızgarayı DersApp ekledi; konum bulmak için kullan, anlatımda söz etme. Emin değilsen işaret koyma.
+- En sonda tek satır: "[özet] ..." bu bölümün 1-2 cümlelik özeti (sonraki bölüme bağlam olarak gider; okunmaz).
+- Bunların dışında hiçbir şey yazma: kod çiti yok, açıklama yok.`;
+
+/** Kayıtlı ders dilim isteği (sayfa görüntüleriyle birlikte gider). */
+export function recordRequest(o: {
+  name: string; pages: number[]; part: number; parts: number; from: number; to: number; pace: LessonPace;
+  words: number; instructions: string; carried: string;
+}): string {
+  const list = o.pages.map((p, i) => `${i + 1}. görüntü = sayfa ${p}`).join(", ");
+  return [
+    `Belge: "${o.name.replace(/\.pdf$/i, "")}". Kayıt aralığı: sayfa ${o.from}-${o.to}. Bu istek: bölüm ${o.part} / ${o.parts}.`,
+    `Görüntüler sırayla PDF'in şu sayfalarıdır: ${list}.`,
+    o.carried ? `Önceki bölümlerin özeti (bağlam; tekrar anlatma):\n${o.carried}` : "Bu, kaydın ilk bölümü.",
+    LESSON_PACE[o.pace],
+    `Uzunluk: sayfa başına yaklaşık ${o.words} kelime (öğretilecek içeriği olmayan sayfalar daha kısa).`,
+    o.instructions.trim() ? `Öğrencinin talimatı: ${o.instructions.trim()}` : "",
+    o.part === o.parts ? "Bu son bölüm: son sayfanın sonunda dersi tek cümleyle toparla." : "",
+    "Bu sayfaların ders kaydı metnini biçime uyarak yaz.",
+  ].filter(Boolean).join("\n\n");
+}

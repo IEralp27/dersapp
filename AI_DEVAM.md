@@ -7,7 +7,7 @@ Ders çalışmaya odaklı masaüstü PDF okuyucu: "sohbet penceresi değil, PDF'
 - **Yığın:** Tauri 2 (Rust çekirdek) + Vite + sade TypeScript (framework yok). Arayüz web katmanında kalacak; kullanıcı Rust'ı seviyor ama saf Rust arayüze geçilmeyecek (karar verildi).
 - **Klasör:** `C:\Users\Eralp\Desktop\dev_app_learn\dersapp`
 - **Çalıştırma:** `npm install` → `npm run tauri dev`
-- **Testler:** `node src/<dosya>.test.ts` (Node 22, TS'i doğrudan çalıştırır). Hepsi geçiyordu: calc-engine, ai/quiz, quiz-store, marks, tts-text, tts-audio, tts-engine, tts-settings, lesson, notes, learner, cli-stream, web/web. `npm run build` temiz.
+- **Testler:** `node src/<dosya>.test.ts` (Node 22, TS'i doğrudan çalıştırır). Hepsi geçiyordu: calc-engine, ai/quiz, quiz-store, marks, tts-text, tts-audio, tts-engine, tts-settings, lesson, notes, learner, cli-stream, web/web, recording. `npm run build` temiz.
 - Ayrıntılı dosya haritası ve kısayollar: `README.md`. MCP kurulumu: `docs/MCP.md`.
 
 ## Var olan özellikler
@@ -42,6 +42,12 @@ Kullanıcı hata çıktısı atarsa önce onu düzelt.
 - Windows'ta bak: Google girişi gömülü webview'da engelleniyor mu ("This browser or app may not be secure"; engellenirse sistem tarayıcısı + elle "Dosya ekle"), girişin kalıcılığı, webview'un konum/boyutu (DPI %125/150, panel açıp kapama, pencere büyütme), NotebookLM'in ses/video indirmesinin `medya/`ya düşüp PDF'e bağlanması (indirme kancası), Ctrl+V ile dosya yükleme, "Klasörde göster" (explorer /select), sürükle-bırak.
 - Bilinen: web sekmesi etkinken yüzen yapay zeka paneli/hesap makinesi webview'un altında kalır; odak webview'dayken Ctrl+W/Ctrl+Tab çalışmaz. Linux'ta çoklu webview konumlama zayıf olabilir.
 - `cargo check` bu ortamda sahte pkg-config dosyalarıyla geçti (Linux hedefi); Windows'a özel satırlar (`explorer`, `rundll32`) derlenmedi.
+
+## Kayıtlı ders (12 Kasım, `claude/ders-kaydi` dalı, gerçek cihazda denenmedi)
+- Panelde "Ders kaydı" çipi -> pencere (liste + form). Metin: `RECORD_SYSTEM_PROMPT` (prompts.ts), satır tabanlı biçim (`[s. N]`, `[işaret] {...}`, `[özet]`; JSON değil, LaTeX bozulmasın), `parseScriptReply` (recording.ts). 3 sayfa/istek, her bölümden sonra `kayit.json` yazılır (iptal/hata: listeden "Devam et").
+- Ses: motorların yeni isteğe bağlı `clips()` alanı (Piper, bulut); parçalar 24 kHz mono tek WAV'da birleşir (WAV doğrudan okunur, MP3 `OfflineAudioContext` ile çözülür), zaman tablosu `spans`. Sistem sesi kayıt yapamaz (Türkçe uyarı).
+- Rust: `src-tauri/src/kayit.rs` (yalnızca 3 dosya adı + `[a-z0-9-]` kimlik; yazma ham istek gövdesiyle). Oynatıcı `recording-player.ts`, işaretler `showPlayerMarks` (marks-ui.ts). Kontrol listesi: `TEST_LISTESI.md`.
+- Bilinen: ses aşaması yarıda kalırsa ses baştan üretilir (metin korunur); 10 dk ≈ 29 MB WAV; Piper her parça için yeniden başlar (uzun kayıtta yavaş).
 
 ## Bilinen eksikler / sıradaki fikirler
 - **Yeni ses motorları (kullanıcı istedi):** Google Cloud TTS, Azure (Microsoft) ve ElevenLabs için birer motor dosyası (`src/ai/tts-<ad>.ts`, `registerEngine` + `BytesSpeaker`; adımlar `tts.ts` başındaki yorumda). Her birinin kendi anahtar alanı ayarlarda olsun. Şu an ayarlardan yalnızca OpenAI uyumlu servisler ("Özel" sağlayıcı) eklenebiliyor. Güncel API biçimlerini resmi dokümandan doğrula.
