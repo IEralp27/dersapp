@@ -2,6 +2,7 @@
 // Uygulama Tauri dışında (düz tarayıcıda) açılırsa basit yedek yollar kullanılır;
 // bu sayede arayüz tarayıcıda da denenebilir.
 import { invoke } from "@tauri-apps/api/core";
+import { OFFICE_EXTENSIONS, isOpenable } from "./office";
 
 export const inTauri = "__TAURI_INTERNALS__" in window;
 
@@ -54,8 +55,11 @@ export async function pickPdfFiles(): Promise<PdfSource[]> {
   const { open } = await import("@tauri-apps/plugin-dialog");
   const picked = await open({
     multiple: true,
-    title: "PDF aç",
-    filters: [{ name: "PDF", extensions: ["pdf"] }],
+    title: "PDF ya da sunum aç",
+    filters: [
+      { name: "PDF ve sunum", extensions: ["pdf", ...OFFICE_EXTENSIONS] },
+      { name: "PDF", extensions: ["pdf"] },
+    ],
   });
   if (!picked) return [];
   const list = Array.isArray(picked) ? picked : [picked];
@@ -67,6 +71,12 @@ export async function pickFolder(): Promise<string | null> {
   const { open } = await import("@tauri-apps/plugin-dialog");
   const picked = await open({ directory: true, title: "Ders klasörünü seç" });
   return typeof picked === "string" ? picked : null;
+}
+
+/** Sunumu (.pptx, .ppt, .odp) LibreOffice ile PDF'e çevirir; üretilen PDF'in yolunu döndürür. */
+export async function officeToPdf(path: string): Promise<string> {
+  if (!inTauri) throw new Error("Sunumlar yalnızca masaüstü uygulamasında açılır.");
+  return invoke<string>("office_to_pdf", { path });
 }
 
 export async function readPdf(path: string): Promise<Uint8Array> {
@@ -134,7 +144,7 @@ export async function onFilesDropped(cb: (sources: PdfSource[]) => void): Promis
     const { getCurrentWebview } = await import("@tauri-apps/api/webview");
     await getCurrentWebview().onDragDropEvent((ev) => {
       if (ev.payload.type !== "drop") return;
-      const pdfs = ev.payload.paths.filter((p) => /\.pdf$/i.test(p));
+      const pdfs = ev.payload.paths.filter(isOpenable);
       if (pdfs.length) cb(pdfs.map((path) => ({ path, name: baseName(path) })));
     });
     return;

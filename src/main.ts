@@ -10,6 +10,7 @@ import { initExams } from "./exams";
 import { initMcp } from "./mcp";
 import { initTextPlace } from "./text-place";
 import { NOTEBOOKLM_URL, hostLabel, isNotebookLm, normalizeInput } from "./web/url";
+import { isOfficePath, stripExt } from "./office";
 import { initMedia, mediaStore, refreshMedia } from "./web/media-ui";
 import * as web from "./web/web-backend";
 
@@ -144,7 +145,7 @@ function makeTab(src: PdfSource): Tab {
   btn.title = src.path.startsWith("mem:") ? src.name : src.path;
   const label = document.createElement("span");
   label.className = "tab-name";
-  label.textContent = src.name.replace(/\.pdf$/i, "");
+  label.textContent = stripExt(src.name);
   const close = document.createElement("button");
   close.className = "tab-close";
   close.title = "Sekmeyi kapat (Ctrl+W)";
@@ -172,8 +173,14 @@ function load(tab: Tab): Promise<void> {
   tab.loading = (async () => {
     try {
       const board = tab.path === BOARD_TAB;
+      // Sunum: önce PDF'e çevir (sekme adı ve not/işaret anahtarı özgün dosyada kalır)
+      const readSrc = async () => {
+        if (!isOfficePath(tab.path)) return backend.readPdf(tab.path);
+        toast("Sunum PDF'e çevriliyor…", "info");
+        return backend.readPdf(await backend.officeToPdf(tab.path));
+      };
       const [data, notes] = await Promise.all([
-        board ? null : tab.data ?? backend.readPdf(tab.path),
+        board ? null : tab.data ?? readSrc(),
         backend.loadNotes(tab.path).catch(() => ""),
       ]);
       // PDF.js baytları kendi iş parçacığına taşır; elimizdeki kopya bozulmasın
@@ -568,7 +575,7 @@ function fileItem(
   icon.textContent = isDir ? "▸" : "";
   const label = document.createElement("span");
   label.className = "fname";
-  label.textContent = isDir ? name : name.replace(/\.pdf$/i, "");
+  label.textContent = isDir ? name : stripExt(name);
   btn.append(icon, label);
   btn.classList.toggle("open", tabs.some((t) => t.path === path));
   btn.classList.toggle("current", active?.path === path);
@@ -617,7 +624,7 @@ function renderSidebar(): void {
     if (!items.length) {
       const li = document.createElement("li");
       li.className = "none";
-      li.textContent = q ? "Eşleşen dosya yok" : "Bu klasörde PDF yok";
+      li.textContent = q ? "Eşleşen dosya yok" : "Bu klasörde PDF ya da sunum yok";
       list.append(li);
     }
   }

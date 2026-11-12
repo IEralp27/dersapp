@@ -73,3 +73,4 @@ Kullanıcı hata çıktısı atarsa önce onu düzelt.
 - Önce küçük ve test edilebilir parça; mevcut kodu oku, yeniden yazma.
 - Kullanım limiti dar: büyük işi tek seferde yapma, paralel çok ajan çalıştırma, uzun özet yazma.
 - Değişiklikten sonra `npm run build` ve ilgili `node` testlerini çalıştır.
+- Sunum (.pptx, .ppt, .odp): dosya paneli/açma penceresi/sürükle-bırak kabul eder; LibreOffice (`office.rs`, `office_to_pdf`) ile PDF'e çevrilip açılır, önbellek `office/` (12 Kasım, `claude/pptx` dalı, gerçek cihazda denenmedi; test: `node src/office.test.ts`).

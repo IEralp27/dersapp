@@ -33,6 +33,15 @@ fn is_pdf(p: &Path) -> bool {
         .unwrap_or(false)
 }
 
+/// Dosya listesinde gösterilecek mi: PDF ya da sunum (.pptx, .ppt, .odp). Yazma denetimi `is_pdf` ile kalır.
+fn is_listable(p: &Path) -> bool {
+    is_pdf(p)
+        || p.extension()
+            .and_then(|e| e.to_str())
+            .map(|e| ["pptx", "ppt", "odp"].iter().any(|x| e.eq_ignore_ascii_case(x)))
+            .unwrap_or(false)
+}
+
 pub fn read_pdf(path: &str) -> Result<Vec<u8>, String> {
     let p = Path::new(path);
     if !is_pdf(p) {
@@ -72,7 +81,7 @@ pub fn list_dir(path: &str) -> Result<Listing, String> {
         // metadata() kısayolları/bağlantıları takip eder; okunamayanı atla
         let Ok(meta) = fs::metadata(&p) else { continue };
         let is_dir = meta.is_dir();
-        if !is_dir && !is_pdf(&p) {
+        if !is_dir && !is_listable(&p) {
             continue;
         }
         let modified = meta

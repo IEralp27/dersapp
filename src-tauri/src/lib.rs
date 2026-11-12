@@ -1,5 +1,6 @@
 mod cli;
 mod kayit;
+mod office;
 mod piper;
 mod store;
 mod web;
@@ -124,6 +125,7 @@ pub fn run() {
             mcp_take_requests, mcp_respond, mcp_context,
             load_profile, save_profile, profile_path,
             cli_prepare, cli_start, cli_stop,
+            office::office_to_pdf,
             kayit::kayit_write, kayit::kayit_read, kayit::kayit_delete, kayit::kayit_export,
             kayit::kayit_path,
             piper::piper_status, piper::piper_install, piper::piper_synthesize, piper::piper_remove,

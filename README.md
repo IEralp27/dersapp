@@ -73,6 +73,7 @@ Claude Desktop, Claude Code, Gemini CLI gibi uygulamalar DersApp'e bağlanıp a�
   - `ai/` yapay zeka paneli; öğretme talimatı `ai/prompts.ts` içinde; sağlayıcılar `ai/providers.ts`, Claude Code CLI `ai/cli-run.ts` + `ai/cli-stream.ts`
   - `exams.ts` sınav takvimi
   - `ai/recording.ts` + `ai/wav.ts` kayıtlı ders mantığı (`node src/ai/recording.test.ts`), `recording-ui.ts` pencere/üretim, `recording-player.ts` oynatıcı
+  - `office.ts` sunum uzantısı denetimi (`node src/office.test.ts`); Rust `office.rs` LibreOffice ile .pptx/.ppt/.odp → PDF (önbellekli)
   - `web/` web sekmesi: `url.ts` adres denetimi, `media-store.ts` ses/video ↔ PDF bağı, `html-text.ts` sayfa metni (`node src/web/web.test.ts`), `media-ui.ts` liste/oynatıcı
   - `mcp.ts` MCP köprüsü (bağlı yapay zekadan gelen istekleri işler)
   - `backend.ts` Rust tarafına köprü

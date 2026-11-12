@@ -45,3 +45,7 @@ Her satırı dene, olursa işaretle. Olmazsa hata metnini/ekran görüntüsünü
 - [ ] Oluşan .md'yi aç: başlıklar düzenli, Türkçe harfler doğru, formüller düz metin ($ ve \frac yok), sonda "Kısa tekrar".
 - [ ] "NotebookLM'e gönder": NotebookLM açılır, Dosya yükle'de Ctrl+V .md yolunu yapıştırır, kaynak metin olarak eklenir.
 - [ ] Kulaklık listesinde "NotebookLM metinleri": Kaydet (kaydet penceresi), Klasörde göster ve Sil çalışır.
+
+## Sunum (PowerPoint)
+- [ ] LibreOffice kuruluyken .pptx aç (dosya paneli, Ctrl+O, sürükle-bırak): "Sunum PDF'e çevriliyor…" görünür, PDF açılır, sekme adı özgün ad; ikinci açılış anında.
+- [ ] LibreOffice yokken aynı dosya: Türkçe kurulum uyarısı (pacman / libreoffice.org). AI paneli, işaret ve notlar sunumda çalışır.
