@@ -7,7 +7,7 @@ Ders çalışmaya odaklı masaüstü PDF okuyucu: "sohbet penceresi değil, PDF'
 - **Yığın:** Tauri 2 (Rust çekirdek) + Vite + sade TypeScript (framework yok). Arayüz web katmanında kalacak; kullanıcı Rust'ı seviyor ama saf Rust arayüze geçilmeyecek (karar verildi).
 - **Klasör:** `C:\Users\Eralp\Desktop\dev_app_learn\dersapp`
 - **Çalıştırma:** `npm install` → `npm run tauri dev`
-- **Testler:** `node src/<dosya>.test.ts` (Node 22, TS'i doğrudan çalıştırır). Hepsi geçiyordu: calc-engine, ai/quiz, quiz-store, marks, tts-text, tts-audio, tts-engine, lesson, notes, learner. `npm run build` temiz.
+- **Testler:** `node src/<dosya>.test.ts` (Node 22, TS'i doğrudan çalıştırır). Hepsi geçiyordu: calc-engine, ai/quiz, quiz-store, marks, tts-text, tts-audio, tts-engine, tts-settings, lesson, notes, learner. `npm run build` temiz.
 - Ayrıntılı dosya haritası ve kısayollar: `README.md`. MCP kurulumu: `docs/MCP.md`.
 
 ## Var olan özellikler
@@ -19,7 +19,7 @@ Ders çalışmaya odaklı masaüstü PDF okuyucu: "sohbet penceresi değil, PDF'
 - Yapay zekanın sayfayı işaretleyerek anlatması (numaralı işaretler ↔ metindeki adımlar)
 - Etkileşimli test + sonuç ekranı, test/özet PDF'i üretimi
 - Ders modu: PDF'i sayfa sayfa anlatma + kontrol sorusu; tüm PDF'ten ders notu PDF'i
-- Sesli anlatım (Alt+S): formülleri doğal Türkçe okur; seçilebilir motorlar (sistem sesi, OpenAI uyumlu bulut sesi)
+- Sesli anlatım (Alt+S): formülleri doğal Türkçe okur; seçilebilir motorlar (sistem sesi, Piper, OpenAI uyumlu bulut sesi). İlk okumada seçim kutusu (dinle + seç); seçim `tts-settings.ts`
 - Öğrenci profili (`ogrenci.md`, panelde "Profilim")
 - MCP sunucusu (`mcp-server/`, ayrı Rust ikilisi): Claude Desktop'a bağlı (`%APPDATA%\Claude\claude_desktop_config.json` ayarlandı)
 
@@ -34,10 +34,9 @@ Kullanıcı hata çıktısı atarsa önce onu düzelt.
 
 ## EN ÖNCELİKLİ (kullanıcı geri bildirimi, 12 Kasım)
 1. **Claude'u uygulama içinde kullanmak:** Gemini ile anlatım kalitesi kötü bulundu. Kullanıcı Claude aboneliğiyle, DersApp'in kendi panelinde konuşmak istiyor (aşağıdaki "Claude Code CLI" planı). İlk iş bu.
-2. **Ses:** Windows sistem sesi (Microsoft Tolga) dinlemesi çok kötü bulundu, varsayılan olarak kullanılmamalı. Doğal bir motor ekle (Piper ücretsiz/çevrimdışı; Google, Azure, ElevenLabs ücretli) ve kullanıcıya bir kez dinletip seçtir.
+2. **Ses:** Piper eklendi (`src/ai/tts-piper.ts`, `src-tauri/src/piper.rs`), sistem sesi artık sessiz varsayılan değil. Gerçek cihazda denenmedi: Windows'ta indirme (sistem `tar.exe` ile zip açma), Piper'ın çalışması ve ses kalitesi. İkili arşivlenmiş rhasspy/piper 2023.11.14-2 sürümünden (yeni proje piper1-gpl yalnızca Python paketi veriyor). Ses: `tr_TR-dfki-medium` (Hugging Face v1.0.0; adres bu ortamdan açılamadı, belgeden alındı). Arayüzde "Piper'ı kaldır" düğmesi yok (`piper_remove` komutu hazır). Her cümle için Piper yeniden başlatılıyor (model yükleme ~1 sn olabilir; önceden isteme gizliyor).
 
 ## Bilinen eksikler / sıradaki fikirler
-- **Linux sesi:** WebKitGTK'da sistem sesi güvenilmez. Plan: Piper (çevrimdışı, Türkçe sesi var) Rust tarafında motor olarak; altyapı hazır (`src/ai/tts-audio.ts`, `tts-engine.ts`, yeni motor = tek dosya). Model ~60 MB: paketle mi, ilk kullanımda mı indirilsin, kullanıcıya sor.
 - **Yeni ses motorları (kullanıcı istedi):** Google Cloud TTS, Azure (Microsoft) ve ElevenLabs için birer motor dosyası (`src/ai/tts-<ad>.ts`, `registerEngine` + `BytesSpeaker`; adımlar `tts.ts` başındaki yorumda). Her birinin kendi anahtar alanı ayarlarda olsun. Şu an ayarlardan yalnızca OpenAI uyumlu servisler ("Özel" sağlayıcı) eklenebiliyor. Güncel API biçimlerini resmi dokümandan doğrula.
 - **Proje GitHub'da:** https://github.com/IEralp27/dersapp (dal `main`). Değişikliklerden sonra commit + push.
 - **OpenAI ses modelleri 6 Ocak 2027'de kapanıyor:** bulut ses motorunu güncellemek gerekecek.
