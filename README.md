@@ -27,6 +27,12 @@ npm run tauri build
 
 Çıktı: `src-tauri/target/release/bundle/`
 
+## Claude aboneliğiyle kullanma (API anahtarsız)
+
+Yapay zeka ayarlarında "Claude Code CLI (abonelik)" sağlayıcısını seç. Gerekenler: Claude Code kurulu olmalı
+(PowerShell: `irm https://claude.ai/install.ps1 | iex`), bir terminalde `claude` yazıp `/login` ile giriş yapılmış olmalı.
+DersApp `claude -p` sürecini başlatıp yanıtı panele akıtır. `claude -p` kullanımı aboneliğin ayrı aylık "Agent SDK kredisi"nden düşer.
+
 ## Kendi yapay zeka uygulamanı bağlama (MCP)
 
 Claude Desktop, Claude Code, Gemini CLI gibi uygulamalar DersApp'e bağlanıp açık PDF'i okuyabilir ve test gönderebilir. Kurulum: `docs/MCP.md`.
@@ -39,13 +45,14 @@ Claude Desktop, Claude Code, Gemini CLI gibi uygulamalar DersApp'e bağlanıp a�
   - `draw.ts` çizim modeli (şekiller, geri al, silgi)
   - `select.ts` seç/taşı aracı
   - `calc.ts`, `calc-engine.ts` hesap makinesi (`node src/calc-engine.test.ts` ile test)
-  - `ai/` yapay zeka paneli; öğretme talimatı `ai/prompts.ts` içinde
+  - `ai/` yapay zeka paneli; öğretme talimatı `ai/prompts.ts` içinde; sağlayıcılar `ai/providers.ts`, Claude Code CLI `ai/cli-run.ts` + `ai/cli-stream.ts`
   - `exams.ts` sınav takvimi
   - `mcp.ts` MCP köprüsü (bağlı yapay zekadan gelen istekleri işler)
   - `backend.ts` Rust tarafına köprü
 - `mcp-server/` ayrı MCP sunucusu (`cargo build --release` ile derlenir)
 - `src-tauri/` Rust tarafı
   - `src/store.rs` dosya okuma, klasör listeleme, ayar ve not kaydı
+  - `src/cli.rs` Claude Code CLI sürecini başlatma/durdurma
   - `src/lib.rs` arayüzün çağırdığı komutlar
 
 ## Kısayollar

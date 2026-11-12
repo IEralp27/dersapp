@@ -8,8 +8,11 @@
 //    tarayıcı için "anthropic-dangerous-direct-browser-access: true". SSE: content_block_delta/text_delta.
 //  - OpenAI uyumlu: POST {base}/chat/completions, "Authorization: Bearer". Görüntü: image_url + data: URL.
 //    SSE: choices[0].delta.content, sonda "data: [DONE]".
+//  - Claude Code CLI ("cli"): fetch değil; Rust tarafı yerel `claude -p` sürecini başlatır (cli-run.ts, src-tauri/src/cli.rs).
 
-export type Protocol = "anthropic" | "openai";
+import { CLI_MODELS } from "./cli-stream";
+
+export type Protocol = "anthropic" | "openai" | "cli";
 
 export interface Preset {
   id: string;
@@ -29,6 +32,14 @@ export const PRESETS: Preset[] = [
     id: "anthropic", label: "Anthropic (Claude)", protocol: "anthropic",
     baseUrl: "https://api.anthropic.com/v1", needsKey: true,
     keyPage: { name: "Claude Console › Settings › API keys", url: "https://platform.claude.com/settings/keys" },
+  },
+  {
+    id: "claude-cli", label: "Claude Code CLI (abonelik)", protocol: "cli",
+    baseUrl: "", needsKey: false,
+    note: "API anahtarı gerekmez: bilgisayarında kurulu Claude Code'u (claude komutu) Claude aboneliğinle kullanır. "
+      + "Kurulum (PowerShell): irm https://claude.ai/install.ps1 | iex — sonra terminalde `claude` yaz ve /login ile giriş yap. "
+      + "Not: Haziran 2026'dan beri `claude -p` kullanımı normal abonelik sınırından değil, aboneliğin ayrı aylık "
+      + "\"Agent SDK kredisi\"nden düşer. Model boş kalırsa Claude Code'un varsayılanı kullanılır.",
   },
   {
     id: "gemini", label: "Google Gemini", protocol: "openai",
@@ -117,6 +128,7 @@ export function currentConfig(s: Settings): ProviderConfig {
 export function missing(s: Settings): string | null {
   const preset = presetOf(s.preset);
   const c = currentConfig(s);
+  if (c.protocol === "cli") return null; // adres, anahtar ve model gerekmez
   if (!c.baseUrl.trim()) return "Taban adres (URL) girilmemiş.";
   if (preset.needsKey && !c.key.trim()) return "API anahtarı girilmemiş.";
   if (!c.model.trim()) return "Model seçilmemiş.";
@@ -296,8 +308,20 @@ export interface StreamOptions {
 
 /** Yanıtı akış halinde ister. Bitince ya da durdurulunca döner; hatada AiError fırlatır. */
 export async function streamChat(o: StreamOptions): Promise<void> {
+  if (o.config.protocol === "cli") return streamCli(o);
   if (o.config.protocol === "anthropic") return streamAnthropic(o);
   return streamOpenAi(o);
+}
+
+/** Claude Code CLI: Tauri köprüsü yalnızca gerektiğinde yüklenir (node testleri etkilenmesin). */
+async function streamCli(o: StreamOptions): Promise<void> {
+  const { runClaudeCli } = await import("./cli-run");
+  try {
+    await runClaudeCli({ model: o.config.model, system: o.system, messages: o.messages, signal: o.signal, onText: o.onText });
+  } catch (e) {
+    if ((e as Error)?.name === "AbortError" || e instanceof AiError) throw e;
+    throw new AiError((e as Error)?.message ?? String(e));
+  }
 }
 
 async function streamAnthropic(o: StreamOptions): Promise<void> {
@@ -395,6 +419,7 @@ export interface ModelInfo {
 
 /** Sağlayıcının model listesi ucundan modelleri çeker. */
 export async function listModels(presetId: string, c: ProviderConfig): Promise<ModelInfo[]> {
+  if (c.protocol === "cli") return CLI_MODELS.map((m) => ({ ...m, vision: true }));
   const url = endpoint(c.baseUrl, c.protocol === "anthropic" ? "/models?limit=1000" : "/models");
   const res = await send(url, { headers: headersFor(c) }, presetId, c.baseUrl);
   let j: { data?: unknown[]; models?: unknown[] };

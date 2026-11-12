@@ -1,3 +1,4 @@
+mod cli;
 mod store;
 
 use std::path::PathBuf;
@@ -76,14 +77,37 @@ async fn mcp_context(app: AppHandle, json: String) -> Result<(), String> {
     store::mcp_context(&data_dir(&app)?, &json)
 }
 
+/// Claude Code CLI: görüntüleri geçici klasöre yazar, yollarını döndürür.
+#[tauri::command]
+async fn cli_prepare(run_id: String, images: Vec<cli::CliImage>) -> Result<Vec<String>, String> {
+    cli::prepare(&run_id, &images)
+}
+
+#[tauri::command]
+async fn cli_start(
+    runs: tauri::State<'_, cli::CliRuns>,
+    args: cli::CliStart,
+    on_event: tauri::ipc::Channel<cli::CliEvent>,
+) -> Result<(), String> {
+    cli::start(&runs, args, on_event)
+}
+
+#[tauri::command]
+async fn cli_stop(runs: tauri::State<'_, cli::CliRuns>, run_id: String) -> Result<(), String> {
+    cli::stop(&runs, &run_id);
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .manage(cli::CliRuns::default())
         .invoke_handler(tauri::generate_handler![
             read_pdf, write_pdf, list_dir, load_state, save_state, load_notes, save_notes,
             mcp_take_requests, mcp_respond, mcp_context,
-            load_profile, save_profile, profile_path
+            load_profile, save_profile, profile_path,
+            cli_prepare, cli_start, cli_stop
         ])
         .run(tauri::generate_context!())
         .expect("uygulama başlatılamadı");

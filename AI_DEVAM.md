@@ -7,7 +7,7 @@ Ders çalışmaya odaklı masaüstü PDF okuyucu: "sohbet penceresi değil, PDF'
 - **Yığın:** Tauri 2 (Rust çekirdek) + Vite + sade TypeScript (framework yok). Arayüz web katmanında kalacak; kullanıcı Rust'ı seviyor ama saf Rust arayüze geçilmeyecek (karar verildi).
 - **Klasör:** `C:\Users\Eralp\Desktop\dev_app_learn\dersapp`
 - **Çalıştırma:** `npm install` → `npm run tauri dev`
-- **Testler:** `node src/<dosya>.test.ts` (Node 22, TS'i doğrudan çalıştırır). Hepsi geçiyordu: calc-engine, ai/quiz, quiz-store, marks, tts-text, tts-audio, tts-engine, lesson, notes, learner. `npm run build` temiz.
+- **Testler:** `node src/<dosya>.test.ts` (Node 22, TS'i doğrudan çalıştırır). Hepsi geçiyordu: calc-engine, ai/quiz, quiz-store, marks, tts-text, tts-audio, tts-engine, lesson, notes, learner, cli-stream. `npm run build` temiz.
 - Ayrıntılı dosya haritası ve kısayollar: `README.md`. MCP kurulumu: `docs/MCP.md`.
 
 ## Var olan özellikler
@@ -33,7 +33,7 @@ Hepsi sahte sunucularla test edildi; ilk gerçek deneme kullanıcıda:
 Kullanıcı hata çıktısı atarsa önce onu düzelt.
 
 ## EN ÖNCELİKLİ (kullanıcı geri bildirimi, 12 Kasım)
-1. **Claude'u uygulama içinde kullanmak:** Gemini ile anlatım kalitesi kötü bulundu. Kullanıcı Claude aboneliğiyle, DersApp'in kendi panelinde konuşmak istiyor (aşağıdaki "Claude Code CLI" planı). İlk iş bu.
+1. **Claude'u uygulama içinde kullanmak:** YAPILDI (12 Kasım, `claude/cli-saglayici` dalı), gerçek cihazda denenmedi. Sağlayıcı "Claude Code CLI (abonelik)": `src-tauri/src/cli.rs` `claude -p --output-format stream-json …` sürecini başlatır (istem stdin, sistem talimatı `--system-prompt-file`, yalnızca Read aracı, sayfa görüntüleri geçici klasörde); `src/ai/cli-stream.ts` satır çözme + istem düzleştirme + Türkçe hatalar (test var), `src/ai/cli-run.ts` Tauri köprüsü. İlk denemede bak: Windows'ta `claude.exe`/`claude.cmd` bulunuyor mu, konsol penceresi açılıyor mu, görüntüyü Read ile okuyor mu, durdur düğmesi süreci kapatıyor mu. Sırada: "Gemini CLI" aynı yapıyla.
 2. **Ses:** Windows sistem sesi (Microsoft Tolga) dinlemesi çok kötü bulundu, varsayılan olarak kullanılmamalı. Doğal bir motor ekle (Piper ücretsiz/çevrimdışı; Google, Azure, ElevenLabs ücretli) ve kullanıcıya bir kez dinletip seçtir.
 
 ## Bilinen eksikler / sıradaki fikirler
@@ -43,7 +43,7 @@ Kullanıcı hata çıktısı atarsa önce onu düzelt.
 - **OpenAI ses modelleri 6 Ocak 2027'de kapanıyor:** bulut ses motorunu güncellemek gerekecek.
 - **Hesap makinesi:** DEG kipinde türev/integral içi trigonometri dereceyle hesaplanıyor (RAD'a çevrilmeli).
 - **Ders notu PDF'i:** içindekilerde sayfa numarası yok. Üretilen PDF'lerde metin resim (seçilemiyor).
-- **Kullanıcının asıl isteği (öncelikli):** API anahtarı yerine aboneliğiyle, DersApp'in KENDİ sohbet panelinde konuşmak. MCP bunu yapamaz (MCP'de yön ters: dış uygulama DersApp'i çağırır). Plan: panele yeni sağlayıcı "Claude Code CLI" (`claude -p`, akış çıktısı) ve "Gemini CLI" (`gemini -p`); Rust tarafı süreci başlatıp çıktıyı arayüze akıtır, sayfa görüntüsü geçici dosya yoluyla verilir. Güncel CLI bayraklarını ve aboneliğin bu kullanıma izin verip vermediğini resmi dokümandan doğrula.
+- **Kullanıcının asıl isteği (öncelikli):** API anahtarı yerine aboneliğiyle, DersApp'in KENDİ sohbet panelinde konuşmak. MCP bunu yapamaz (MCP'de yön ters: dış uygulama DersApp'i çağırır). Claude Code CLI sağlayıcısı eklendi (yukarıya bak; `claude -p` kullanımı aboneliğin ayrı aylık Agent SDK kredisinden düşer). Kalan: "Gemini CLI" (`gemini -p`), güncel bayrakları resmi dokümandan doğrula.
 - **Fikirler:** "Çözümümü kontrol et" (tahtadaki çözümde hatalı satırı işaretle), "Bugün ne çalışayım?" (sınav takvimi + zayıf konular), hata defteri (aralıklı tekrar), "bana anlat" (öğrenci anlatır, yapay zeka eksiği bulur), PowerPoint desteği, Gemini/ChatGPT uygulamaları için uzak HTTP MCP.
 
 ## Çalışma kuralları

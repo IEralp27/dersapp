@@ -458,7 +458,7 @@ function render(): void {
   const c = activeConv();
   const cur = host.current();
   const config = currentConfig(settings);
-  modelLabel.textContent = missing(settings) ? "" : `${presetOf(settings.preset).label.replace(/ \(.*\)$/, "")} · ${config.model}`;
+  modelLabel.textContent = missing(settings) ? "" : `${presetOf(settings.preset).label.replace(/ \(.*\)$/, "")} · ${config.model || "varsayılan model"}`;
   modelLabel.title = modelLabel.textContent;
   toggleBtn.classList.toggle("on", ui.open);
   panel.hidden = !ui.open;
@@ -585,7 +585,8 @@ function setupView(why: string): HTMLElement {
     + "sağlayıcısının API anahtarı gerekir. Anahtar senin hesabına bağlıdır; kullanım ücreti sağlayıcının fiyatına göre hesabından düşer."));
   const ol = el("ol");
   const li1 = el("li");
-  li1.append("Bir sağlayıcı seç: Anthropic, Google Gemini, OpenAI, OpenRouter ya da bilgisayarında çalışan Ollama (anahtarsız).");
+  li1.append("Bir sağlayıcı seç: Anthropic, Google Gemini, OpenAI, OpenRouter ya da bilgisayarında çalışan Ollama (anahtarsız). "
+    + "Claude aboneliğin varsa anahtarsız \"Claude Code CLI\" seçeneğini kullanabilirsin (Claude Code kurulu ve giriş yapılmış olmalı).");
   const li2 = el("li");
   li2.append("Sağlayıcının sitesinde bir API anahtarı oluştur:");
   const keys = el("ul", "ai-keypages");
@@ -690,21 +691,23 @@ function settingsView(): HTMLElement {
   modelSel.addEventListener("change", () => {
     modelIn.value = modelSel.value;
   });
-  const modelHint = el("span", "ai-hint",
-    "Görüntü (vision) anlayan bir model seçmelisin; yoksa model PDF'ten seçtiğin bölgeyi göremez. Listede \"görsel\" yazanlar görüntü kabul eder.");
+  const modelHintText =
+    "Görüntü (vision) anlayan bir model seçmelisin; yoksa model PDF'ten seçtiğin bölgeyi göremez. Listede \"görsel\" yazanlar görüntü kabul eder.";
+  const modelHint = el("span", "ai-hint", modelHintText);
   const status = el("div", "ai-status");
   const note = el("p", "ai-hint");
   const marksField = marksSettingField();
 
   const protoField = field("Protokol", protoSel);
   const keyField = field("API anahtarı", keyRow, keyHint);
+  const baseField = field("Taban adres (URL)", baseIn);
   const wsField = field("Çalışma alanı kimliği (isteğe bağlı)", wsIn,
     "Yalnızca anahtarın bir çalışma alanına bağlı değilse gerekir (Claude Console › Workspaces).");
 
   form.append(
     field("Sağlayıcı", presetSel),
     protoField,
-    field("Taban adres (URL)", baseIn),
+    baseField,
     keyField,
     wsField,
     field("Model", modelRow),
@@ -735,10 +738,14 @@ function settingsView(): HTMLElement {
     keyField.querySelector(".ai-label")!.textContent = p.needsKey ? "API anahtarı" : "API anahtarı (isteğe bağlı)";
     note.textContent = p.note ?? "";
     note.hidden = !p.note;
+    const cli = p.protocol === "cli";
+    baseField.hidden = keyField.hidden = cli;
+    fetchBtn.textContent = cli ? "Seçenekler" : "Modelleri getir";
+    modelHint.textContent = cli ? "sonnet, opus ya da haiku yaz (ya da tam model adı); boş bırakırsan Claude Code'un varsayılanı kullanılır." : modelHintText;
     syncProto();
   };
   const syncProto = () => {
-    wsField.hidden = protoSel.value !== "anthropic";
+    wsField.hidden = protoSel.value !== "anthropic" || presetOf(cur).protocol === "cli";
   };
   /** Formun şu an gösterdiği sağlayıcı (seçim değişince eskisinin taslağı korunur) */
   let cur = presetOf(settings.preset).id;
@@ -758,7 +765,7 @@ function settingsView(): HTMLElement {
   async function fetchModels(): Promise<void> {
     collect();
     const c = currentConfig(draft);
-    if (!/^https?:\/\//.test(c.baseUrl)) {
+    if (c.protocol !== "cli" && !/^https?:\/\//.test(c.baseUrl)) {
       status.textContent = "Önce geçerli bir taban adres gir (http:// ya da https:// ile başlamalı).";
       status.className = "ai-status bad";
       return;
