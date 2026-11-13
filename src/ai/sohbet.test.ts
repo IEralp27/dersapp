@@ -1,6 +1,6 @@
 // Çalıştırma: node src/ai/sohbet.test.ts
 import assert from "node:assert/strict";
-import { ConvStore, DEFAULT_TITLE, deriveTitle, docsContext, newConvId, titleOf, trimTurns, validId } from "./sohbet.ts";
+import { ConvStore, MAX_CONVS, historyList, markClosed, pruneIds, DEFAULT_TITLE, deriveTitle, docsContext, newConvId, titleOf, trimTurns, validId } from "./sohbet.ts";
 import type { SavedTurn } from "./sohbet.ts";
 
 let count = 0;
@@ -81,7 +81,7 @@ t("depo: kaydet, yeniden yükle, sil, buda", () => {
   b.remove("abc2");
   assert.deepEqual(new ConvStore(kv).ids(), ["abc1"]);
   b.prune(["yok"]);
-  assert.deepEqual(new ConvStore(kv).ids(), []);
+  assert.equal(new ConvStore(kv).get("abc1")!.closed, true); // silinmez, kapalı işaretlenir
 });
 
 t("depo: bozuk kayıt ve yazma hatası", () => {
@@ -107,6 +107,50 @@ t("ekli belgeler: API sağlayıcısında sayfa metni, ajanda yol", () => {
   assert.ok(cli.includes("(yol: /d/ders.pdf)"));
   assert.ok(!cli.includes("Laplace"));
   assert.ok(docsContext([{ ...docs[0], text: "x".repeat(50) }], false, 10).includes("x".repeat(10) + " …(kısaltıldı)"));
+});
+
+const U: SavedTurn[] = [{ role: "user", text: "s" }, { role: "assistant", text: "y" }];
+const mk = (id: string, updated: number, turns = U, closed = false) => ({ id, title: titleOf(turns), created: 1, updated, turns, ...(closed ? { closed } : {}) });
+
+t("kapat: dolu kapalı işaretlenir, boş silinir", () => {
+  assert.equal(markClosed(mk("a", 1))!.closed, true);
+  assert.equal(markClosed(mk("a", 1, []) ), null);
+  const kv = new Mem();
+  const s = new ConvStore(kv);
+  s.put("aa1", U, 5);
+  s.put("bb1", [], 6);
+  s.close("aa1");
+  s.close("bb1");
+  const r = new ConvStore(kv);
+  assert.deepEqual(r.ids(), ["aa1"]);
+  assert.equal(r.get("aa1")!.closed, true);
+  assert.equal(r.history()[0].open, false);
+  r.reopen("aa1");
+  assert.equal(new ConvStore(kv).get("aa1")!.closed, undefined);
+  r.close("aa1");
+  r.put("aa1", U, 9); // sekmeden yeniden yazılınca açık
+  assert.equal(new ConvStore(kv).get("aa1")!.closed, undefined);
+});
+
+t("geçmiş: yeniden eskiye, boşlar yok, sayı ve açık bilgisi", () => {
+  const h = historyList([mk("a", 1), mk("b", 3, U, true), mk("c", 2, []), mk("d", 2)]);
+  assert.deepEqual(h.map((x) => x.id), ["b", "d", "a"]);
+  assert.equal(h[0].count, 2);
+  assert.equal(h[0].open, false);
+  assert.equal(h[1].open, true);
+});
+
+t("50 sınırı: en eski kapalılar atılır, açıklar korunur", () => {
+  const list = Array.from({ length: 53 }, (_, i) => mk("c" + i, i, U, i % 2 === 0));
+  const drop = pruneIds(list);
+  assert.equal(drop.length, 3);
+  assert.deepEqual(drop, ["c0", "c2", "c4"]);
+  assert.deepEqual(pruneIds(list.map((c) => ({ ...c, closed: undefined }))), []); // hepsi açık: atılmaz
+  assert.deepEqual(pruneIds(list.slice(0, 50)), []);
+  const kv = new Mem();
+  const s = new ConvStore(kv);
+  for (let i = 0; i < MAX_CONVS + 5; i++) { s.put("x" + i.toString(36), U, i); s.close("x" + i.toString(36)); }
+  assert.equal(new ConvStore(kv).ids().length, MAX_CONVS);
 });
 
 console.log(`sohbet: ${count} test geçti`);

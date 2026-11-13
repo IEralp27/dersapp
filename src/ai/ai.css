@@ -500,3 +500,11 @@ body.ai-win-busy .view { pointer-events: none; }
 }
 .ai-tab-picker button:hover, .ai-tab-picker button:focus-visible { background: var(--hover); }
 .ai-tab-picker button.on { color: var(--accent); }
+
+.ai-tab-history { min-width: 300px; }
+.ai-hist-empty { padding: 8px 10px; color: var(--muted, inherit); }
+.ai-hist-row { display: flex; align-items: center; gap: 4px; }
+.ai-tab-history .ai-hist-open { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ai-hist-open small { opacity: 0.65; }
+.ai-tab-history .ai-hist-del { flex: none; font-size: 12px; }
+.ai-tab-history .ai-hist-del.on { color: #e5484d; }

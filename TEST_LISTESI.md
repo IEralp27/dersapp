@@ -75,3 +75,4 @@ Her satırı dene, olursa işaretle. Olmazsa hata metnini/ekran görüntüsünü
 - [ ] Claude Code CLI + Dosyalara eriş açık: durum satırları görünür, klasördeki dosyaları okur.
 - [ ] Sesli okuma (yanıttaki düğme, Alt+S) sekmede çalışır; oynatıcı çubuğu sekmenin altında.
 - [ ] İki sekme ayrı konuşma; uygulamayı kapat-aç: sekmeler ve konuşmalar geri gelir; sekmeyi kapatınca konuşma silinir.
+- [ ] AI sekmesini kapat; "Geçmiş" düğmesinden aç (mesajlar geri gelir), açık olanı seçince o sekmeye geçer, "Sil" iki tıkla siler; boş sohbet kapanınca geçmişte görünmez.

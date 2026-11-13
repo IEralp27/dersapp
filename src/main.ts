@@ -1,7 +1,7 @@
 // Uygulama kabuğu: sekmeler, dosyalar paneli, araç çubuğu, kısayollar.
 import * as backend from "./backend";
 import { initAi, toggleAi } from "./ai/panel";
-import { AiTab, initAiTabs, newAiTabId, pruneAiTabs, savedAiTitle } from "./ai/ai-tab";
+import { AiTab, deleteAiConv, initAiTabs, newAiTabId, pruneAiTabs, reopenAiConv, savedAiTitle } from "./ai/ai-tab";
 import { validId } from "./ai/sohbet";
 import type { Entry, Listing, PdfSource } from "./backend";
 import type { Tool } from "./draw";
@@ -287,7 +287,7 @@ function closeTab(tab: Tab): void {
     tab.view = null;
   }
   if (tab.web?.opened) web.webClose(tab.web.label).catch((e) => console.error("Web sekmesi kapatılamadı", e));
-  tab.ai?.dispose(); // konuşma da silinir
+  tab.ai?.dispose(); // konuşma geçmişte kalır (boşsa silinir)
   tabs.splice(i, 1);
   if (active === tab) {
     active = null;
@@ -952,6 +952,20 @@ async function init(): Promise<void> {
         setTabName(t, title);
         persist();
       }
+    },
+    openConv: (id) => {
+      const open = tabs.find((x) => x.ai?.id === id);
+      if (open) return activate(open);
+      if (!reopenAiConv(id)) return;
+      const tab = makeAiTab(id, savedAiTitle(id));
+      tabs.push(tab);
+      activate(tab);
+      persist();
+    },
+    forgetConv: (id) => {
+      const open = tabs.find((x) => x.ai?.id === id);
+      if (open) closeTab(open);
+      deleteAiConv(id);
     },
   });
   initMedia({

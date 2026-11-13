@@ -15,6 +15,18 @@ export interface SavedConv {
   created: number;
   updated: number;
   turns: SavedTurn[];
+  /** Sekmesi kapatılmış (yalnızca geçmişte görünür) */
+  closed?: boolean;
+}
+
+/** Geçmiş listesindeki satır */
+export interface HistoryItem {
+  id: string;
+  title: string;
+  updated: number;
+  /** Konuşmadaki mesaj sayısı (kullanıcı + yanıt) */
+  count: number;
+  open: boolean;
 }
 
 /** localStorage benzeri (testte sahte nesne) */
@@ -27,8 +39,28 @@ export const STORE_KEY = "dersapp.ai.sohbet.v1";
 export const DEFAULT_TITLE = "Yeni sohbet";
 /** Bir konuşmada saklanan en çok metin (karakter); aşılırsa en eski turlar atılır */
 const MAX_CONV_CHARS = 300_000;
-/** En çok bu kadar konuşma saklanır (en eski güncellenen atılır) */
-const MAX_CONVS = 60;
+/** En çok bu kadar konuşma saklanır (önce en eski kapalılar atılır) */
+export const MAX_CONVS = 50;
+
+const hasUser = (c: SavedConv) => c.turns.some((t) => t.role === "user");
+
+/** Kapat: kullanıcı mesajı olan konuşma kapalı işaretlenir, boş olan silinir (null). */
+export function markClosed(c: SavedConv): SavedConv | null {
+  return hasUser(c) ? { ...c, closed: true } : null;
+}
+
+/** Geçmiş listesi: en yeni güncellenen başta; açık/kapalı hepsi (boşlar hariç). */
+export function historyList(convs: SavedConv[]): HistoryItem[] {
+  return convs.filter(hasUser).sort((a, b) => b.updated - a.updated)
+    .map((c) => ({ id: c.id, title: c.title, updated: c.updated, count: c.turns.length, open: !c.closed }));
+}
+
+/** En çok max konuşma kalsın: en eski kapalılar atılır; açık sekmeler ve keep kimliği asla. Atılan kimlikleri döndürür. */
+export function pruneIds(convs: SavedConv[], max = MAX_CONVS, keep?: string): string[] {
+  const extra = convs.length - max;
+  if (extra <= 0) return [];
+  return convs.filter((c) => c.closed && c.id !== keep).sort((a, b) => a.updated - b.updated).slice(0, extra).map((c) => c.id);
+}
 
 /** İlk kullanıcı mesajından sekme başlığı: Markdown/LaTeX işaretleri ve boşluklar sadeleşir, kelime sınırında kısalır. */
 export function deriveTitle(text: string, max = 32): string {
@@ -108,11 +140,34 @@ export class ConvStore {
     const old = this.convs.get(id);
     const kept = trimTurns(turns.map((t) => ({ role: t.role, text: t.text, ...(t.label ? { label: t.label } : {}) })));
     this.convs.set(id, { id, title: titleOf(kept), created: old?.created ?? now, updated: now, turns: kept });
-    if (this.convs.size > MAX_CONVS) {
-      const oldest = [...this.convs.values()].sort((a, b) => a.updated - b.updated).slice(0, this.convs.size - MAX_CONVS);
-      for (const c of oldest) if (c.id !== id) this.convs.delete(c.id);
-    }
+    for (const x of pruneIds([...this.convs.values()], MAX_CONVS, id)) this.convs.delete(x);
     return this.save();
+  }
+
+  /** Sekme kapandı: konuşma korunur (kapalı işaretlenir), boşsa silinir. */
+  close(id: string): boolean {
+    const c = this.convs.get(id);
+    if (!c) return true;
+    const m = markClosed(c);
+    if (m) this.convs.set(id, m);
+    else this.convs.delete(id);
+    return this.save();
+  }
+
+  /** Geçmişten yeniden açıldı: kapalı işareti kalkar. */
+  reopen(id: string): boolean {
+    const c = this.convs.get(id);
+    if (!c) return false;
+    if (c.closed) {
+      const { closed: _, ...rest } = c;
+      this.convs.set(id, rest);
+      this.save();
+    }
+    return true;
+  }
+
+  history(): HistoryItem[] {
+    return historyList([...this.convs.values()]);
   }
 
   remove(id: string): boolean {
@@ -120,11 +175,24 @@ export class ConvStore {
     return this.save();
   }
 
-  /** Açık sekmesi olmayan konuşmaları siler (açılışta). */
+  /** Açık sekmesi olmayan konuşmaları kapalı işaretler (boşlar silinir); açılışta. Sekmesi olanlar açık sayılır. */
   prune(keep: Iterable<string>): void {
     const k = new Set(keep);
     let changed = false;
-    for (const id of [...this.convs.keys()]) if (!k.has(id)) changed = this.convs.delete(id) || changed;
+    for (const c of [...this.convs.values()]) {
+      if (k.has(c.id)) {
+        if (c.closed) {
+          this.convs.set(c.id, { ...c, closed: false });
+          changed = true;
+        }
+      } else if (!c.closed) {
+        const m = markClosed(c);
+        if (m) this.convs.set(c.id, m);
+        else this.convs.delete(c.id);
+        changed = true;
+      }
+    }
+    for (const x of pruneIds([...this.convs.values()])) changed = this.convs.delete(x) || changed;
     if (changed) this.save();
   }
 
