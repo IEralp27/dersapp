@@ -525,7 +525,8 @@ function call(n: Extract<Node, { k: "call" }>, env: Env): Complex {
   if (name === "roots") throw new CalcError("roots(…) yalnızca tek başına kullanılabilir (sonucu bir liste)");
   if (name === "deriv" || name === "integ") {
     const v = bindName(n.args[1], name);
-    const f = (x: number) => ev(n.args[0], { ...env, locals: new Map(env.locals).set(v, C(x)) });
+    // Analiz radyan ister: iç ifade DERECE modunda bile radyanla hesaplanır (iç içe türev/integral dahil).
+    const f = (x: number) => ev(n.args[0], { ...env, degrees: false, locals: new Map(env.locals).set(v, C(x)) });
     if (name === "deriv") {
       const x0 = real(ev(n.args[2], env), "deriv (nokta)");
       return derivative(f, x0, v);

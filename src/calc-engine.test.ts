@@ -231,7 +231,8 @@ bases("255", "0xFF", "0b1111 1111"); bases("10", "0xA", "0b1010"); bases("-10", 
 bases("2.5", null); bases("3+4j", null); bases("roots(1;-3;2)", null); bases("0.1+0.2+0.7", "0x1"); bases("4096", "0x1000", "0b1 0000 0000 0000");
 // --- Sayısal türev ve integral
 ceq("deriv(x^2; x; 3)", 6, 0, CD, 1e-7); ceq("deriv(x^3; x; 2)", 12, 0, CD, 1e-7); ceq("deriv(sin(x); x; 0)", 1, 0, CR, 1e-7);
-ceq("deriv(sin(x); x; 0)", Math.PI / 180, 0, CD, 1e-7); ceq("deriv(exp(x); x; 1)", Math.E, 0, CR, 1e-7);
+ceq("deriv(sin(x); x; 0)", 1, 0, CD, 1e-7); ceq("integ(sin(x); x; 0; pi)", 2, 0, CD); ceq("sin(90)", 1, 0, CD); ceq("sin(90)", Math.sin(90), 0, CR);
+ceq("integ(deriv(sin(t); t; x); x; 0; pi/2)", 1, 0, CD, 1e-6); ceq("deriv(sin(x); x; 0)+sin(90)", 2, 0, CD, 1e-7); ceq("deriv(exp(x); x; 1)", Math.E, 0, CR, 1e-7);
 ceq("deriv(ln(x); x; 0.01)", 100, 0, CR, 1e-6); ceq("deriv(1/x; x; 2)", -0.25, 0, CR, 1e-7); ceq("deriv(t^2+3t; t; 1)", 5, 0, CR, 1e-7);
 ceq("deriv(abs(x); x; 2)", 1, 0, CR, 1e-7); ceq("deriv(R1*x; x; 5)", 4700, 0, V, 1e-7); ceq("deriv(x^2; x; 1)", 2, 0, V, 1e-7);
 ceq("deriv(exp(j*x); x; 0)", 0, 1, CR, 1e-7);
