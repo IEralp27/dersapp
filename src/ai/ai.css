@@ -427,3 +427,19 @@ body.ai-win-busy .view { pointer-events: none; }
   border-bottom: 2px solid #ffffff66;
   border-radius: 0 0 3px 0;
 }
+
+/* Dosyalara eriş (ajan-ui.ts) */
+.ai-ajan { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.ai-ajan:empty { display: none; }
+.ai-ajan-toggle.on { border-color: var(--accent, #1e90ff); color: var(--accent, #1e90ff); }
+.ai-ajan-roots { flex-basis: 100%; color: var(--dim); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-agent-log { display: flex; flex-direction: column; gap: 2px; margin-bottom: 6px; color: var(--dim); font-size: 11.5px; }
+.ai-agent-log .now { color: inherit; font-weight: 600; }
+.ai-cite {
+  color: var(--accent, #1e90ff); cursor: pointer; text-decoration: underline dotted; white-space: nowrap;
+}
+.ai-cite:hover, .ai-cite:focus-visible { text-decoration: underline; }
+.ai-hits { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 6px 0; font-size: 12px; }
+.ai-hits-title { font-weight: 600; margin-bottom: 4px; }
+.ai-hit { margin-top: 6px; }
+.ai-hit-snip { color: var(--dim); margin-top: 2px; }

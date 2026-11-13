@@ -6,6 +6,7 @@
 //!    komut satırına hiç girmez (Windows'ta `.cmd` dosyalarının argüman ayrıştırması sorun çıkarmaz).
 //!  - Her çalışma kendi geçici klasöründe (çalışma dizini) olur; görüntüler oraya yazılır ve
 //!    çalışma bitince klasör silinir. Yalnızca Read aracı açıktır.
+//!  - Ajan kipi (`access`): Read/Glob/Grep salt okunur, kökler ajan.rs'te doğrulanır, çalışma dizini ilk kök.
 //!  - `--bare` kullanılmaz: abonelik girişini yok sayar.
 
 use std::collections::HashMap;
@@ -35,6 +36,21 @@ pub struct CliStart {
     pub model: String,
     pub system: String,
     pub prompt: String,
+    /// Dosyalara erişim (ajan kipi). Yoksa eski davranış: yalnızca geçici klasördeki görüntüler.
+    #[serde(default)]
+    pub access: Option<CliAccess>,
+}
+
+/// Ajan kipi: CLI'ya salt okunur Read/Glob/Grep araçları ve kök klasörler verilir.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CliAccess {
+    /// İzin verilen kökler; ilki çalışma dizini olur (ajan.rs ile doğrulanır)
+    pub roots: Vec<String>,
+    /// Araç turu sınırı (--max-turns)
+    pub max_turns: u32,
+    /// `--restricted` kullanılsın mı (Claude Code 2.1.248+; eski sürümde arayüz false ile yeniden dener)
+    pub restricted: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -173,10 +189,40 @@ pub fn start(runs: &CliRuns, a: CliStart, on_event: Channel<CliEvent>) -> Result
     std::fs::write(&sys_file, &a.system).map_err(|e| format!("Talimat dosyası yazılamadı: {e}"))?;
 
     let mut cmd = command_for(&exe);
-    cmd.current_dir(&dir)
-        .args(["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages"])
-        .args(["--tools", "Read", "--allowedTools", "Read"])
-        .args(["--strict-mcp-config", "--no-session-persistence"])
+    cmd.args(["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]);
+    let roots = a.access.as_ref().map(|x| crate::ajan::canonical_roots(&x.roots).0).unwrap_or_default();
+    match a.access.as_ref().filter(|_| !roots.is_empty()) {
+        // Ajan kipi (bayraklar: code.claude.com/docs/en/cli-reference, permissions; 2026-11):
+        //  --tools yalnızca okuma araçlarını bırakır (Bash/Edit/Write/WebFetch yok),
+        //  --permission-mode dontAsk izin isteyecek her çağrıyı reddeder (çalışma dizinleri dışında okuma),
+        //  --restricted dosya araçlarını çalışma dizinleriyle sınırlar ve kullanıcı/proje ayarlarını
+        //  (kancalar, izin kuralları) yüklemez; --settings dosyası yine de okumayı köklerle sınırlar.
+        Some(x) => {
+            let settings = dir.join("ayarlar.json");
+            std::fs::write(&settings, r#"{"permissions":{"blockReadsOutsideWorkingDirectories":true}}"#)
+                .map_err(|e| format!("Ayar dosyası yazılamadı: {e}"))?;
+            cmd.current_dir(crate::ajan::plain(&roots[0]))
+                .args(["--tools", "Read,Glob,Grep", "--permission-mode", "dontAsk"])
+                .args(["--disallowedTools", "mcp__*"])
+                .arg("--settings")
+                .arg(&settings)
+                .args(["--max-turns", &x.max_turns.clamp(1, 100).to_string()]);
+            if x.restricted {
+                cmd.arg("--restricted");
+            } else {
+                cmd.args(["--setting-sources", "user"]);
+            }
+            // Görüntüler geçici klasörde: o da okunabilsin
+            cmd.arg("--add-dir").arg(&dir);
+            for r in &roots[1..] {
+                cmd.arg("--add-dir").arg(crate::ajan::plain(r));
+            }
+        }
+        None => {
+            cmd.current_dir(&dir).args(["--tools", "Read", "--allowedTools", "Read"]);
+        }
+    }
+    cmd.args(["--strict-mcp-config", "--no-session-persistence"])
         .arg("--system-prompt-file")
         .arg(&sys_file);
     if !model.is_empty() {

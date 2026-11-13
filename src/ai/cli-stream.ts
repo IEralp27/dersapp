@@ -36,6 +36,12 @@ export const CLI_SYSTEM_NOTE = "\n\n# Bu ortam hakkında\n"
   + "Yanıtlamadan önce hepsini Read aracıyla aç ve dikkatle incele. Aracı kullandığını, dosya yollarını ya da "
   + "\"görüntüye bakayım\" gibi ara cümleleri yazma; doğrudan yanıtla. Başka araç kullanma.";
 
+/** Ajan kipinde (Dosyalara eriş açık) CLI_SYSTEM_NOTE yerine eklenen not; kökler ajan.ts agentNote'ta. */
+export const CLI_AGENT_NOTE = "\n\n# Bu ortam hakkında\n"
+  + "Öğrencinin gönderdiği görüntüler (PDF sayfası, seçilen bölge) diskte dosya olarak duruyor; mesajda yolları yazılı. "
+  + "Görüntü eklenmişse yanıtlamadan önce Read aracıyla aç. Aracı kullandığını, dosya yollarını ya da "
+  + "\"bakayım\" gibi ara cümleleri yazma; doğrudan yanıtla. Yalnızca Read, Glob ve Grep araçların var.";
+
 /** Model seçenekleri (CLI takma adları). Boş bırakılırsa CLI'nın varsayılanı kullanılır. */
 export const CLI_MODELS = [
   { id: "sonnet", name: "Sonnet (hızlı, önerilen)" },
@@ -98,6 +104,10 @@ export class CliStream {
   result: CliResult | null = null;
   /** Son api_retry hatasının türü (rate_limit, authentication_failed…) */
   retryError = "";
+  /** Tur sınırına (--max-turns) ulaşıldı */
+  maxTurns = false;
+  /** Ajan kipinde araç çağrıları (Read/Glob/Grep): durum satırı için */
+  onTool: ((name: string, input: Record<string, unknown>) => void) | null = null;
   /** Yeni bir metin bloğu başladı: araç kullanımından sonra gelen metni ayırmak için */
   private newBlock = false;
 
@@ -129,11 +139,16 @@ export class CliStream {
         this.emitted = true;
         this.onText(t);
       }
+    } else if (j.type === "assistant" && !j.parent_tool_use_id && Array.isArray(j.message?.content)) {
+      for (const b of j.message.content) {
+        if (b?.type === "tool_use" && typeof b.name === "string") this.onTool?.(b.name, b.input ?? {});
+      }
     } else if (j.type === "system" && j.subtype === "api_retry") {
       if (typeof j.error === "string") this.retryError = j.error;
     } else if (j.type === "result") {
       const text = typeof j.result === "string" ? j.result
         : Array.isArray(j.errors) ? j.errors.join("\n") : "";
+      if (j.subtype === "error_max_turns") this.maxTurns = true;
       this.result = { text, isError: !!j.is_error || (typeof j.subtype === "string" && j.subtype.startsWith("error")) };
       if (!this.result.isError && !this.emitted && text) {
         this.emitted = true;

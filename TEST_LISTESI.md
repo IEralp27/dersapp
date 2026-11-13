@@ -9,6 +9,14 @@ Her satırı dene, olursa işaretle. Olmazsa hata metnini/ekran görüntüsünü
 - [ ] Uzun yanıtta "Durdur": akış hemen durur, Görev Yöneticisi'nde `claude` süreci kalmaz.
 - [ ] `claude` kurulu değilken dene: ne yapılacağını söyleyen Türkçe hata çıkar.
 
+## Dosyalara eriş (ajan)
+- [ ] "Klasör seç" sonrası panelde "Dosyalara eriş: açık" ve doğru klasör adları görünür; tıklayınca kapanır.
+- [ ] CLI ile "entropinin geçtiği tüm sayfaları bul": "📄 … okunuyor" / "🔎 … aranıyor" satırları çıkar, yanıtta [dosya.pdf s.N] etiketleri var.
+- [ ] Etikete tıkla: dosya açılır (açıksa öne gelir), doğru sayfaya gider.
+- [ ] "3 PDF'i karşılaştır" ve "klasördeki notlardan sınav özeti çıkar" çalışır; uzun işte "Durdur" süreci kapatır.
+- [ ] Klasör dışındaki bir dosyayı okumasını iste: okuyamaz (reddedilir).
+- [ ] API anahtarlı sağlayıcıda kutuya konu yaz, "Klasörde ara": bulunan yerler kartı çıkar, yanıt kaynak gösterir; ikinci aramada dizin hızlıdır.
+
 ## Piper sesi ve ilk seçim
 - [ ] İlk kez Alt+S: seslendirici seçim kutusu açılır; her sesin "Dinle"si çalar.
 - [ ] Piper'ı seç: boyut sorulur, "İndir" ile ilerleme çubuğu dolar, sonra okuma başlar.

@@ -7,7 +7,7 @@ Ders çalışmaya odaklı masaüstü PDF okuyucu: "sohbet penceresi değil, PDF'
 - **Yığın:** Tauri 2 (Rust çekirdek) + Vite + sade TypeScript (framework yok). Arayüz web katmanında kalacak; kullanıcı Rust'ı seviyor ama saf Rust arayüze geçilmeyecek (karar verildi).
 - **Klasör:** `C:\Users\Eralp\Desktop\dev_app_learn\dersapp`
 - **Çalıştırma:** `npm install` → `npm run tauri dev`
-- **Testler:** `node src/<dosya>.test.ts` (Node 22, TS'i doğrudan çalıştırır). Hepsi geçiyordu: calc-engine, ai/quiz, quiz-store, marks, tts-text, tts-audio, tts-engine, tts-settings, lesson, notes, learner, cli-stream, web/web, recording, nblm. `npm run build` temiz.
+- **Testler:** `node src/<dosya>.test.ts` (Node 22, TS'i doğrudan çalıştırır). Hepsi geçiyordu: calc-engine, ai/quiz, quiz-store, marks, tts-text, tts-audio, tts-engine, tts-settings, lesson, notes, learner, cli-stream, web/web, recording, nblm, ajan. `npm run build` temiz.
 - Ayrıntılı dosya haritası ve kısayollar: `README.md`. MCP kurulumu: `docs/MCP.md`.
 
 ## Var olan özellikler
@@ -35,6 +35,13 @@ Kullanıcı hata çıktısı atarsa önce onu düzelt.
 ## EN ÖNCELİKLİ (kullanıcı geri bildirimi, 12 Kasım)
 1. **Claude'u uygulama içinde kullanmak:** YAPILDI (12 Kasım, `claude/cli-saglayici` dalı), gerçek cihazda denenmedi. Sağlayıcı "Claude Code CLI (abonelik)": `src-tauri/src/cli.rs` `claude -p --output-format stream-json …` sürecini başlatır (istem stdin, sistem talimatı `--system-prompt-file`, yalnızca Read aracı, sayfa görüntüleri geçici klasörde); `src/ai/cli-stream.ts` satır çözme + istem düzleştirme + Türkçe hatalar (test var), `src/ai/cli-run.ts` Tauri köprüsü. İlk denemede bak: Windows'ta `claude.exe`/`claude.cmd` bulunuyor mu, konsol penceresi açılıyor mu, görüntüyü Read ile okuyor mu, durdur düğmesi süreci kapatıyor mu. Sırada: "Gemini CLI" aynı yapıyla.
 2. **Ses:** Piper eklendi (`src/ai/tts-piper.ts`, `src-tauri/src/piper.rs`), sistem sesi artık sessiz varsayılan değil. Gerçek cihazda denenmedi: Windows'ta indirme (sistem `tar.exe` ile zip açma), Piper'ın çalışması ve ses kalitesi. İkili arşivlenmiş rhasspy/piper 2023.11.14-2 sürümünden (yeni proje piper1-gpl yalnızca Python paketi veriyor). Ses: `tr_TR-dfki-medium` (Hugging Face v1.0.0; adres bu ortamdan açılamadı, belgeden alındı). Arayüzde "Piper'ı kaldır" düğmesi yok (`piper_remove` komutu hazır). Her cümle için Piper yeniden başlatılıyor (model yükleme ~1 sn olabilir; önceden isteme gizliyor).
+
+## Dosyalara eriş / ajan (13 Kasım, `claude/ajan-erisim` dalı, gerçek cihazda denenmedi)
+- Panelde "Dosyalara eriş: açık/kapalı" (klasör seçilince varsayılan açık, `localStorage dersapp.ai.ajan`) + erişilen klasörler satırı. Kökler: çalışma klasörü, açık PDF klasörleri, `dersler/` (`ajan.ts computeRoots`; Rust `ajan.rs canonical_roots` gerçek yola çevirir, `/`, `C:\` ve ev klasörünü reddeder, her dosyayı kök altında mı diye denetler).
+- CLI ajan kipi (`cli.rs`, `access`): çalışma dizini ilk kök, `--tools Read,Glob,Grep --permission-mode dontAsk --restricted --settings <blockReadsOutsideWorkingDirectories> --disallowedTools mcp__* --max-turns 40 --add-dir <diğer kökler + görüntü klasörü>`. Bayraklar code.claude.com/docs/en/cli-reference + permissions'tan doğrulandı; bu ortamda claude 2.1.323 ile ayrıştırma ve araç listesi (Glob, Grep, Read) denendi (giriş yok, yanıt denenmedi). `--restricted` tanınmazsa (2.1.248 öncesi) bir kez `--setting-sources user` ile yeniden denenir. Sistem notu `agentNote`, araç satırları `toolStatus`, tur sınırı `error_max_turns`.
+- Diğer sağlayıcılar: "Klasörde ara" (kutudaki metni arar). Metin PDF.js ile çıkarılır, önbellek `ajan-metin/<FNV>.json` (yol + mtime + boyut). Sıralama BM25 benzeri (`searchDocs`), bağlam `searchContext`.
+- Atıflar `[dosya.pdf s.12]` → `linkCitations` tıklanır yapar → `openAt` (main.ts).
+- İlk denemede bak: Windows'ta `\\?\` önekli yollar (`plain`), CLI PDF'i Read `pages` ile okuyor mu, durum satırları, Durdur, büyük klasörde dizinleme süresi.
 
 ## Web sekmesi + NotebookLM (12 Kasım, `claude/web-sekmesi` dalı, gerçek cihazda denenmedi)
 - Gömülü çocuk webview (Tauri `unstable` özelliği, `Window::add_child`), `src-tauri/src/web.rs` + `src/web/`. Ayrı pencere yerine seçildi: sekme gibi davranır; konum `#web-area`'ya göre JS'ten verilir, başka sekmede gizlenir.

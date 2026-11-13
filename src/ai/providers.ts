@@ -11,6 +11,7 @@
 //  - Claude Code CLI ("cli"): fetch değil; Rust tarafı yerel `claude -p` sürecini başlatır (cli-run.ts, src-tauri/src/cli.rs).
 
 import { CLI_MODELS } from "./cli-stream";
+import type { CliAgent } from "./cli-run";
 
 export type Protocol = "anthropic" | "openai" | "cli";
 
@@ -304,6 +305,8 @@ export interface StreamOptions {
   messages: ChatMessage[];
   signal: AbortSignal;
   onText: (delta: string) => void;
+  /** Yalnızca Claude Code CLI: dosyalara salt okunur erişim (ajan-ui.ts); diğer sağlayıcılar yok sayar */
+  agent?: CliAgent;
 }
 
 /** Yanıtı akış halinde ister. Bitince ya da durdurulunca döner; hatada AiError fırlatır. */
@@ -317,7 +320,7 @@ export async function streamChat(o: StreamOptions): Promise<void> {
 async function streamCli(o: StreamOptions): Promise<void> {
   const { runClaudeCli } = await import("./cli-run");
   try {
-    await runClaudeCli({ model: o.config.model, system: o.system, messages: o.messages, signal: o.signal, onText: o.onText });
+    await runClaudeCli({ model: o.config.model, system: o.system, messages: o.messages, signal: o.signal, onText: o.onText, agent: o.agent });
   } catch (e) {
     if ((e as Error)?.name === "AbortError" || e instanceof AiError) throw e;
     throw new AiError((e as Error)?.message ?? String(e));

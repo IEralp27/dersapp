@@ -260,6 +260,15 @@ function openSources(sources: PdfSource[]): void {
   if (last) activate(last);
 }
 
+/** Dosyayı açar (açıksa öne getirir) ve sayfaya gider: yapay zeka yanıtındaki [dosya.pdf s.12] atıfları. */
+async function openAt(path: string, page: number): Promise<void> {
+  openSources([{ path, name: backend.baseName(path) }]);
+  const tab = tabs.find((t) => t.path === path);
+  if (!tab) return;
+  await load(tab);
+  if (tab.view && page >= 1 && page <= tab.view.pageCount) tab.view.goToPage(page);
+}
+
 function closeTab(tab: Tab): void {
   const i = tabs.indexOf(tab);
   if (i < 0) return;
@@ -893,6 +902,10 @@ async function init(): Promise<void> {
     current: () => (active?.view ? { path: active.path, name: active.name, view: active.view } : null),
     web: () => (active?.web?.opened ? { path: active.path, name: active.name, label: active.web.label, url: active.web.url } : null),
     toast,
+    // Dosyalara eriş (ai/ajan-ui.ts)
+    folder: () => saved.folder,
+    docs: () => tabs.filter((t) => !t.web && !t.data && t.path !== BOARD_TAB).map((t) => t.path),
+    openAt: (path, page) => void openAt(path, page),
   });
   initMedia({
     current: () => (active?.view && !active.data && active.path !== BOARD_TAB ? { path: active.path, name: active.name } : null),
