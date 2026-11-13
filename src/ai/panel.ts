@@ -11,6 +11,7 @@ import { renderMarkdown } from "./markdown";
 import { initStudy, studyRow, dialogOpen } from "./quiz-view";
 import { recordChip } from "./recording-ui";
 import { nblmChip } from "./nblm-ui";
+import { agentOptions, agentSystem, ajanRow, initAjan, linkCitations } from "./ajan-ui";
 import { initLearner, learnerAction, profileEntry, profileView, systemWithProfile } from "./learner-ui";
 import {
   initLesson, lessonChip, lessonCompose, lessonInput, lessonInterrupt, lessonPlaceholder, lessonSync, lessonTakesInput,
@@ -38,6 +39,10 @@ export interface AiHost {
   /** Etkin web sekmesi (sayfası açılmışsa); metni "Bu sayfayı anlat" için Rust'tan indirilir */
   web?(): WebCurrent | null;
   toast(text: string, kind?: "error" | "info"): void;
+  /** Dosyalara eriş (ajan-ui.ts): çalışma klasörü, açık PDF'ler, dosyayı sayfada açma */
+  folder?(): string | null;
+  docs?(): string[];
+  openAt?(path: string, page: number): void;
 }
 
 interface WebCurrent {
@@ -299,12 +304,14 @@ async function ask(c: Conv, q: AskInput): Promise<void> {
     frame = 0;
     const stick = shown === c && nearBottom();
     body.innerHTML = renderMarkdown(visibleText(bot.text, !final), !final);
+    linkCitations(body); // [dosya.pdf s.12] -> tıklanır (ajan-ui.ts)
     if (stick) scrollDown();
   };
 
   try {
     await streamChat({
-      presetId, config, system: systemWithProfile(systemWithMarks(SYSTEM_PROMPT)), messages, signal: ctrl.signal,
+      presetId, config, system: agentSystem(systemWithProfile(systemWithMarks(SYSTEM_PROMPT))), messages, signal: ctrl.signal,
+      agent: agentOptions(wrap), // Dosyalara eriş (yalnızca Claude Code CLI)
       onText: (d) => {
         bot.text += d;
         if (!frame) frame = requestAnimationFrame(() => paint(false));
@@ -675,6 +682,7 @@ function renderCompose(c: Conv | null): void {
     composeEl.append(row);
   }
 
+  composeEl.append(ajanRow(busy || noDoc)); // Dosyalara eriş / Klasörde ara (ajan-ui.ts)
   composeEl.append(studyRow(busy || noDoc)); // Test hazırla / Özet PDF'i / Testlerim (quiz-view.ts)
   composeEl.append(profileEntry(openProfile)); // Profilim (learner-ui.ts)
 
@@ -1122,6 +1130,24 @@ export function initAi(h: AiHost): void {
     },
     render, toImage: (cv) => toImage(cv), openSettings, panelOpen: () => ui.open && !panel.hidden,
   });
+  initAjan({
+    folder: () => host.folder?.() ?? null, docs: () => host.docs?.() ?? [], current: () => host.current(),
+    openAt: (path, page) => host.openAt?.(path, page), isCli: () => currentConfig(settings).protocol === "cli",
+    query: (take) => {
+      const q = input.value;
+      if (take) (input.value = "", autosize());
+      return q;
+    },
+    send: (text, label) => {
+      const c = activeConv();
+      if (c) void ask(c, { text, label, att: null });
+    },
+    notice: (card) => {
+      const c = activeConv();
+      if (c) appendNotice(c.path, c.name, card);
+    },
+    render, toast: (t, k) => host.toast(t, k),
+  }, panel);
   // Sekme değişince (etkin sekme sınıfı değişir) panel o sekmenin konuşmasını göstersin
   new MutationObserver(() => render()).observe(document.getElementById("tabs")!, {
     subtree: true, childList: true, attributes: true, attributeFilter: ["class"],

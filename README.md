@@ -36,6 +36,14 @@ Yapay zeka ayarlarında "Claude Code CLI (abonelik)" sağlayıcısını seç. Ge
 (PowerShell: `irm https://claude.ai/install.ps1 | iex`), bir terminalde `claude` yazıp `/login` ile giriş yapılmış olmalı.
 DersApp `claude -p` sürecini başlatıp yanıtı panele akıtır. `claude -p` kullanımı aboneliğin ayrı aylık "Agent SDK kredisi"nden düşer.
 
+## Dosyalara eriş (yapay zeka klasörü kendisi okur)
+
+Dosyalar panelinde "Klasör seç" yapınca yapay zeka panelinde "Dosyalara eriş: açık" görünür (tıklayınca kapanır).
+Erişim yalnızca okumadır ve şu klasörlerle sınırlıdır: çalışma klasörü, açık PDF'lerin klasörleri, uygulama çıktıları (`dersler/`).
+- **Claude Code CLI:** yapay zeka PDF'leri ve notları kendisi açar, arar (Read/Glob/Grep; yazma, komut, ağ yok). Panelde "📄 … okunuyor" satırları görünür.
+- **API anahtarlı sağlayıcılar:** soruyu kutuya yaz, "Klasörde ara"ya bas: klasördeki PDF/.md metinlerinde en uygun yerler bulunup soruya eklenir (metin önbelleği veri klasöründe `ajan-metin/`).
+- Yanıttaki `[dosya.pdf s.12]` etiketine tıklayınca o dosya o sayfada açılır.
+
 ## Web sekmesi ve NotebookLM
 
 Üst çubuktaki küre düğmesi ("Site aç") bir siteyi sekme olarak açar (geri, ileri, yenile, sistem tarayıcısında aç).
@@ -84,6 +92,7 @@ Claude Desktop, Claude Code, Gemini CLI gibi uygulamalar DersApp'e bağlanıp a�
   - `select.ts` seç/taşı aracı
   - `calc.ts`, `calc-engine.ts` hesap makinesi (`node src/calc-engine.test.ts` ile test)
   - `ai/` yapay zeka paneli; öğretme talimatı `ai/prompts.ts` içinde; sağlayıcılar `ai/providers.ts`, Claude Code CLI `ai/cli-run.ts` + `ai/cli-stream.ts`
+  - `ai/ajan.ts` Dosyalara eriş saf mantığı (kökler, atıflar, arama; `node src/ai/ajan.test.ts`), `ai/ajan-ui.ts` panel satırı + dizin
   - `exams.ts` sınav takvimi
   - `ai/recording.ts` + `ai/wav.ts` kayıtlı ders mantığı (`node src/ai/recording.test.ts`), `recording-ui.ts` pencere/üretim, `recording-player.ts` oynatıcı
   - `office.ts` sunum uzantısı denetimi (`node src/office.test.ts`); Rust `office.rs` LibreOffice ile .pptx/.ppt/.odp → PDF (önbellekli)
@@ -94,6 +103,7 @@ Claude Desktop, Claude Code, Gemini CLI gibi uygulamalar DersApp'e bağlanıp a�
 - `src-tauri/` Rust tarafı
   - `src/store.rs` dosya okuma, klasör listeleme, ayar ve not kaydı
   - `src/cli.rs` Claude Code CLI sürecini başlatma/durdurma
+  - `src/ajan.rs` Dosyalara eriş: kök doğrulama (sembolik bağ kaçışı yok), dosya listesi/okuma, metin önbelleği
   - `src/piper.rs` Piper sesi: ilk kullanımda indirme (onaylı, doğrulamalı), metni WAV'a çevirme
   - `src/kayit.rs` kayıtlı ders dosyaları (`dersler/` klasörü)
   - `src/web.rs` web sekmesi (gömülü webview, indirmeler, sayfa metni indirme)

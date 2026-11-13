@@ -4,7 +4,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { inTauri } from "../backend";
 import {
-  CLI_SYSTEM_NOTE, CliError, CliStream, INSTALL_HELP, PROMPT_MAX_BYTES, byteLength, cliError, flattenPrompt, validModel,
+  CLI_AGENT_NOTE, CLI_SYSTEM_NOTE, CliError, CliStream, INSTALL_HELP, PROMPT_MAX_BYTES, byteLength, cliError, flattenPrompt, validModel,
 } from "./cli-stream";
 import type { ChatImage, ChatMessage } from "./providers";
 
@@ -18,12 +18,35 @@ export interface CliRunOptions {
   messages: ChatMessage[];
   signal: AbortSignal;
   onText: (delta: string) => void;
+  /** Dosyalara erişim (ajan kipi, ajan-ui.ts): kökler, tur sınırı, araç olayı */
+  agent?: CliAgent;
 }
+
+export interface CliAgent {
+  roots: string[];
+  maxTurns: number;
+  onTool: (name: string, input: Record<string, unknown>) => void;
+}
+
+/** Claude Code `--restricted` bayrağını tanımıyor mu (2.1.248'den eski sürüm) */
+let noRestricted = false;
+const UNKNOWN_RESTRICTED = /unknown option[^\n]*--restricted/i;
 
 const abortError = () => new DOMException("İptal", "AbortError");
 
 /** Bir CLI çalışması. Bitince döner; durdurulursa AbortError, hatada CliError fırlatır. */
 export async function runClaudeCli(o: CliRunOptions): Promise<void> {
+  if (!o.agent?.roots.length || noRestricted) return runOnce(o, false);
+  try {
+    return await runOnce(o, true);
+  } catch (e) {
+    if (!(e instanceof CliError) || !UNKNOWN_RESTRICTED.test(e.message)) throw e;
+    noRestricted = true; // eski sürüm: --setting-sources user + okuma sınırı ayarıyla yeniden dene
+    return runOnce(o, false);
+  }
+}
+
+async function runOnce(o: CliRunOptions, restricted: boolean): Promise<void> {
   if (!inTauri) throw new CliError("Claude Code CLI yalnızca masaüstü uygulamasında (Tauri) çalışır.");
   const model = o.model.trim();
   if (model && !validModel(model)) throw new CliError("Model adı geçersiz. sonnet, opus ya da haiku yaz (ya da boş bırak).");
@@ -60,6 +83,9 @@ export async function runClaudeCli(o: CliRunOptions): Promise<void> {
     if (stopped) throw abortError();
 
     const parser = new CliStream(o.onText);
+    if (o.agent) parser.onTool = o.agent.onTool;
+    const access = o.agent?.roots.length ? { roots: o.agent.roots, maxTurns: o.agent.maxTurns, restricted } : null;
+    const note = access ? CLI_AGENT_NOTE : CLI_SYSTEM_NOTE;
     const done = new Promise<CliEvent & { kind: "done" }>((resolve) => (finish = resolve));
     const ch = new Channel<CliEvent>();
     ch.onmessage = (ev) => {
@@ -68,7 +94,7 @@ export async function runClaudeCli(o: CliRunOptions): Promise<void> {
       else finish?.(ev);
     };
     try {
-      await invoke("cli_start", { args: { runId, model, system: o.system + CLI_SYSTEM_NOTE, prompt }, onEvent: ch });
+      await invoke("cli_start", { args: { runId, model, system: o.system + note, prompt, access }, onEvent: ch });
     } catch (e) {
       if (/CLI_NOT_FOUND/.test(String(e))) throw new CliError(INSTALL_HELP, "not-installed");
       throw new CliError("Claude Code başlatılamadı: " + String(e));
@@ -80,6 +106,12 @@ export async function runClaudeCli(o: CliRunOptions): Promise<void> {
     const r = parser.result;
     if (r && !r.isError && end.code === 0) return;
     if (r && !r.isError && parser.emitted) return; // yanıt geldi; çıkış kodunu dert etme
+    if (parser.maxTurns) {
+      // Tur sınırı: yazılanı koru, öğrenciye söyle
+      if (parser.emitted) return o.onText("\n\n_(Dosya okuma sınırına ulaşıldı; yanıt eksik olabilir. Soruyu daraltıp yeniden sor.)_");
+      throw new CliError("Yapay zeka çok fazla dosya okudu ve sınıra ulaştı (en çok " + (o.agent?.maxTurns ?? 0)
+        + " adım). Soruyu daralt: belirli bir dosya ya da sayfa aralığı söyle.", "other");
+    }
     throw cliError({ result: r?.text, stderr: end.stderr, code: end.code, retry: parser.retryError });
   } finally {
     o.signal.removeEventListener("abort", stop);

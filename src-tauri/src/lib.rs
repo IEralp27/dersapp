@@ -1,3 +1,4 @@
+mod ajan;
 mod cli;
 mod kayit;
 mod office;
@@ -128,6 +129,8 @@ pub fn run() {
             office::office_to_pdf,
             kayit::kayit_write, kayit::kayit_read, kayit::kayit_delete, kayit::kayit_export,
             kayit::kayit_path,
+            ajan::ajan_roots, ajan::ajan_app_dir, ajan::ajan_files, ajan::ajan_read,
+            ajan::ajan_cache_get, ajan::ajan_cache_put,
             piper::piper_status, piper::piper_install, piper::piper_synthesize, piper::piper_remove,
             web::web_open, web::web_bounds, web::web_nav, web::web_close, web::web_page_text,
             web::open_external, web::reveal_file, web::media_import, web::media_read

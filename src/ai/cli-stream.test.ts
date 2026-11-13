@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { CliStream, cliError, flattenPrompt, validModel } from "./cli-stream.ts";
 
+const same = (a: unknown, b: unknown) => assert.equal(JSON.stringify(a), JSON.stringify(b));
 let count = 0;
 const t = (name: string, fn: () => void) => {
   try {
@@ -97,4 +98,19 @@ t("model adı denetimi", () => {
   assert.ok(!validModel("a&b"));
 });
 
+
+t("ajan: araç çağrıları ve tur sınırı", () => {
+  const tools: string[] = [];
+  const s = new CliStream(() => {});
+  s.onTool = (name, input) => tools.push(name + ":" + String(input.file_path ?? input.pattern ?? ""));
+  s.line(JSON.stringify({ type: "assistant", parent_tool_use_id: null, message: { content: [
+    { type: "text", text: "x" }, { type: "tool_use", id: "1", name: "Read", input: { file_path: "/d/a.pdf", pages: "1-3" } },
+  ] } }));
+  s.line(JSON.stringify({ type: "assistant", parent_tool_use_id: "z", message: { content: [{ type: "tool_use", name: "Grep", input: {} }] } }));
+  s.line(JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name: "Grep", input: { pattern: "entropi" } }] } }));
+  same(tools, ["Read:/d/a.pdf", "Grep:entropi"]);
+  s.line(JSON.stringify({ type: "result", subtype: "error_max_turns", is_error: true }));
+  assert.equal(s.maxTurns, true);
+  assert.equal(s.result?.isError, true);
+});
 console.log(`cli-stream: ${count} test geçti`);
