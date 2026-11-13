@@ -96,7 +96,8 @@ Claude Desktop, Claude Code, Gemini CLI gibi uygulamalar DersApp'e bağlanıp a�
   - `ai/ajan.ts` Dosyalara eriş saf mantığı (kökler, atıflar, arama; `node src/ai/ajan.test.ts`), `ai/ajan-ui.ts` panel satırı + dizin
   - `exams.ts` sınav takvimi
   - `ai/recording.ts` + `ai/wav.ts` kayıtlı ders mantığı (`node src/ai/recording.test.ts`), `recording-ui.ts` pencere/üretim, `recording-player.ts` oynatıcı
-  - `office.ts` sunum uzantısı denetimi (`node src/office.test.ts`); Rust `office.rs` LibreOffice ile .pptx/.ppt/.odp → PDF (önbellekli)
+  - `office.ts` sunum uzantısı denetimi (`node src/office.test.ts`); Rust `office.rs` LibreOffice ile .ppt/.odp (ve istenirse .pptx) → PDF, yerleşik dönüştürücünün önbelleği (`office_cache_get/put`)
+  - `pptx/` yerleşik .pptx → PDF (LibreOffice'siz, varsayılan): `xml.ts` küçük XML ayrıştırıcı, `model.ts` slayt modeli (yer tutucu/katman/ana slayt kalıtımı, tema renkleri, tablo, notlar), `layout.ts` metin kaydırma, `geom.ts` şekiller, `render.ts` canvas çizimi, `pdf.ts` PDF yazıcı (slayt resmi + görünmez ToUnicode metin katmanı), `index.ts` akış (`node src/pptx/pptx.test.ts`; örnek: `scripts/pptx-fixture.py`)
   - `web/` web sekmesi: `url.ts` adres denetimi, `media-store.ts` ses/video ↔ PDF bağı, `html-text.ts` sayfa metni (`node src/web/web.test.ts`), `media-ui.ts` liste/oynatıcı
   - `mcp.ts` MCP köprüsü (bağlı yapay zekadan gelen istekleri işler)
   - `backend.ts` Rust tarafına köprü

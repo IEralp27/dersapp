@@ -14,7 +14,7 @@ import { initToday } from "./ai/today-ui";
 import { initMcp } from "./mcp";
 import { initTextPlace } from "./text-place";
 import { NOTEBOOKLM_URL, hostLabel, isNotebookLm, normalizeInput } from "./web/url";
-import { isOfficePath, stripExt } from "./office";
+import { isOfficePath, isPptx, pptxCacheKey, progressText, stripExt } from "./office";
 import { initMedia, mediaStore, refreshMedia } from "./web/media-ui";
 import * as web from "./web/web-backend";
 
@@ -76,12 +76,22 @@ let listing: Listing | null = null;
 
 // ------------------------------------------------------------ Bildirimler
 
-function toast(text: string, kind: "error" | "info" = "error"): void {
+function toast(text: string, kind: "error" | "info" = "error", action?: { label: string; run: () => void }): void {
   const el = document.createElement("div");
   el.className = "toast " + kind;
   el.textContent = text;
+  if (action) {
+    const b = document.createElement("button");
+    b.className = "toast-action";
+    b.textContent = action.label;
+    b.onclick = () => {
+      el.remove();
+      action.run();
+    };
+    el.append(" ", b);
+  }
   $("toasts").append(el);
-  setTimeout(() => el.remove(), kind === "error" ? 6000 : 3000);
+  setTimeout(() => el.remove(), action ? 9000 : kind === "error" ? 6000 : 3000);
   // Web sekmesinde yerel webview bildirimlerin üstünü örter: mesaj içerik alanının üstündeki çubukta da görünsün
   if (active?.web) webNote(text, kind);
 }
@@ -170,6 +180,80 @@ function makeTab(src: PdfSource): Tab {
   return tab;
 }
 
+// ------------------------------------------------------------ Sunumlar
+// .pptx: yerleşik dönüştürücü (src/pptx/, LibreOffice gerekmez); .ppt/.odp ya da kullanıcı isterse: LibreOffice.
+
+/** Hata zaten (eylem düğmesiyle) gösterildi. */
+class ShownError extends Error {}
+
+/** "LibreOffice ile birebir aç" seçilen sunumlar (localStorage). */
+const LO_KEY = "dersapp.office.lo";
+const loPaths = new Set<string>(JSON.parse(localStorage.getItem(LO_KEY) ?? "[]") as string[]);
+const loOffered = new Set<string>();
+
+function progressToast(text: string): { set(t: string): void; done(): void } {
+  const el = document.createElement("div");
+  el.className = "toast info";
+  el.textContent = text;
+  $("toasts").append(el);
+  return { set: (t) => void (el.textContent = t), done: () => el.remove() };
+}
+
+async function builtinPptx(bytes: Uint8Array, name: string): Promise<Uint8Array> {
+  const prog = progressToast("Sunum hazırlanıyor…");
+  try {
+    const { pptxToPdf } = await import("./pptx/index");
+    return await pptxToPdf(bytes, stripExt(name), (d, t) => prog.set(progressText(d, t)));
+  } finally {
+    prog.done();
+  }
+}
+
+/** Sekmeyi LibreOffice ile yeniden açar (seçim hatırlanır). */
+function reopenWithLo(tab: Tab): void {
+  loPaths.add(tab.path);
+  localStorage.setItem(LO_KEY, JSON.stringify([...loPaths].slice(-200)));
+  if (tab.view) {
+    saved.pos[tab.path] = tab.view.getPos();
+    if (noteTimers.has(tab.path)) saveNotesSoon(tab, true);
+    tab.view.dispose();
+    tab.view = null;
+  }
+  if (tabs.includes(tab)) void load(tab);
+}
+
+/** Sunumu PDF baytlarına çevirir (önbellekli). */
+async function presentationPdf(tab: Tab): Promise<Uint8Array> {
+  if (!isPptx(tab.path) || loPaths.has(tab.path)) {
+    toast("Sunum LibreOffice ile PDF'e çevriliyor…", "info");
+    return backend.readPdf(await backend.officeToPdf(tab.path));
+  }
+  const info = await backend.officeInfo(tab.path);
+  const offer = () => {
+    if (!info.libreoffice || loOffered.has(tab.path)) return;
+    loOffered.add(tab.path);
+    toast("Sunum yerleşik dönüştürücüyle açıldı.", "info", { label: "LibreOffice ile birebir aç", run: () => reopenWithLo(tab) });
+  };
+  const key = pptxCacheKey(info.abs, info.mtime, info.size);
+  const hit = await backend.officeCacheGet(key).catch(() => null);
+  if (hit) {
+    offer();
+    return backend.readPdf(hit);
+  }
+  let pdf: Uint8Array;
+  try {
+    pdf = await builtinPptx(await backend.officeRead(tab.path), tab.name);
+  } catch (e) {
+    const why = `"${tab.name}" yerleşik dönüştürücüyle açılamadı: ${message(e)}`;
+    if (info.libreoffice) toast(why, "error", { label: "LibreOffice ile birebir aç", run: () => reopenWithLo(tab) });
+    else toast(why + " LibreOffice kurulursa onunla açılabilir (libreoffice.org).");
+    throw new ShownError(why);
+  }
+  await backend.officeCachePut(key, pdf).catch((e) => console.error("Sunum önbelleğe yazılamadı", e));
+  offer();
+  return pdf;
+}
+
 /** Sekmenin PDF'ini (henüz yüklenmediyse) yükler. Sekmeler ilk tıklandığında yüklenir. */
 function load(tab: Tab): Promise<void> {
   if (tab.web || tab.ai) return Promise.resolve();
@@ -181,16 +265,16 @@ function load(tab: Tab): Promise<void> {
       const board = tab.path === BOARD_TAB;
       // Sunum: önce PDF'e çevir (sekme adı ve not/işaret anahtarı özgün dosyada kalır)
       const readSrc = async () => {
+        if (tab.data) return isPptx(tab.name) ? builtinPptx(tab.data, tab.name) : tab.data;
         if (!isOfficePath(tab.path)) return backend.readPdf(tab.path);
-        toast("Sunum PDF'e çevriliyor…", "info");
-        return backend.readPdf(await backend.officeToPdf(tab.path));
+        return presentationPdf(tab);
       };
       const [data, notes] = await Promise.all([
-        board ? null : tab.data ?? readSrc(),
+        board ? null : readSrc(),
         backend.loadNotes(tab.path).catch(() => ""),
       ]);
       // PDF.js baytları kendi iş parçacığına taşır; elimizdeki kopya bozulmasın
-      const view = data ? await PdfView.open(tab.path, tab.data ? data.slice() : data, tools, notes)
+      const view = data ? await PdfView.open(tab.path, data === tab.data ? data.slice() : data, tools, notes)
         : PdfView.board(tab.path, tools, notes);
       if (!tabs.includes(tab)) {
         view.dispose(); // yüklenirken sekme kapatıldı
@@ -214,7 +298,7 @@ function load(tab: Tab): Promise<void> {
       addRecent(tab);
     } catch (e) {
       tab.failed = true;
-      toast(e instanceof PdfError ? e.message : `"${tab.name}" açılamadı: ${message(e)}`);
+      if (!(e instanceof ShownError)) toast(e instanceof PdfError ? e.message : `"${tab.name}" açılamadı: ${message(e)}`);
     } finally {
       tab.loading = null;
       tab.btn.classList.remove("loading");

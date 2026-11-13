@@ -56,7 +56,10 @@ Her satırı dene, olursa işaretle. Olmazsa hata metnini/ekran görüntüsünü
 
 ## Sunum (PowerPoint)
 - [ ] LibreOffice kuruluyken .pptx aç (dosya paneli, Ctrl+O, sürükle-bırak): "Sunum PDF'e çevriliyor…" görünür, PDF açılır, sekme adı özgün ad; ikinci açılış anında.
-- [ ] LibreOffice yokken aynı dosya: Türkçe kurulum uyarısı (pacman / libreoffice.org). AI paneli, işaret ve notlar sunumda çalışır.
+- [ ] LibreOffice yokken .ppt/.odp: Türkçe kurulum uyarısı (pacman / libreoffice.org).
+- [ ] LibreOffice yokken .pptx: "Sunum hazırlanıyor… N/M" görünür, slaytlar doğru oranda açılır; Türkçe metin seçilir/aranır, AI sayfa metnini görür; ikinci açılış anında (önbellek).
+- [ ] Gerçek ders sunumunda (resim, tablo, madde, renkli arka plan) görüntü kabul edilebilir mi; 40 slayt süre ve PDF boyutu.
+- [ ] LibreOffice kuruluyken .pptx: "LibreOffice ile birebir aç" düğmesi sekmeyi LibreOffice çıktısıyla yeniden açar; seçim sonraki açılışta hatırlanır. AI paneli, işaret ve notlar sunumda çalışır.
 
 ## Hata defteri, Bugün, çözüm kontrolü
 - [ ] Bir testte 2 soruyu yanlış yap: "Hata defteri: 2 kart eklendi" bildirimi çıkar. Uygulamayı kapat-aç: kartlar durur.

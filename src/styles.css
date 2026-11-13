@@ -354,3 +354,14 @@ body[data-tool="eraser"] .page { cursor: cell; }
   user-select: text;
 }
 .toast.error { border-left-color: var(--danger); }
+.toast-action {
+  pointer-events: auto;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}

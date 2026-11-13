@@ -36,7 +36,7 @@ function browserPick(): Promise<PdfSource[]> {
   return new Promise((resolve) => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "application/pdf,.pdf";
+    input.accept = "application/pdf,.pdf,.pptx";
     input.multiple = true;
     input.onchange = async () => {
       const out: PdfSource[] = [];
@@ -77,6 +77,34 @@ export async function pickFolder(): Promise<string | null> {
 export async function officeToPdf(path: string): Promise<string> {
   if (!inTauri) throw new Error("Sunumlar yalnızca masaüstü uygulamasında açılır.");
   return invoke<string>("office_to_pdf", { path });
+}
+
+export interface OfficeInfo {
+  abs: string;
+  mtime: number;
+  size: number;
+  /** LibreOffice kurulu mu */
+  libreoffice: boolean;
+}
+
+/** Yerleşik .pptx dönüştürücü için dosya bilgisi (tam yol, değişme zamanı, boyut). */
+export async function officeInfo(path: string): Promise<OfficeInfo> {
+  return invoke<OfficeInfo>("office_info", { path });
+}
+
+/** Sunum dosyasının baytları. */
+export async function officeRead(path: string): Promise<Uint8Array> {
+  return new Uint8Array(await invoke<ArrayBuffer>("office_read", { path }));
+}
+
+/** Önbellekteki yerleşik dönüştürücü PDF'inin yolu (yoksa null). */
+export async function officeCacheGet(key: string): Promise<string | null> {
+  return invoke<string | null>("office_cache_get", { key });
+}
+
+/** Üretilen PDF'i önbelleğe yazar, yolunu döndürür. */
+export async function officeCachePut(key: string, pdf: Uint8Array): Promise<string> {
+  return invoke<string>("office_cache_put", pdf, { headers: { "x-office-key": key } });
 }
 
 export async function readPdf(path: string): Promise<Uint8Array> {
