@@ -49,3 +49,13 @@ Her satırı dene, olursa işaretle. Olmazsa hata metnini/ekran görüntüsünü
 ## Sunum (PowerPoint)
 - [ ] LibreOffice kuruluyken .pptx aç (dosya paneli, Ctrl+O, sürükle-bırak): "Sunum PDF'e çevriliyor…" görünür, PDF açılır, sekme adı özgün ad; ikinci açılış anında.
 - [ ] LibreOffice yokken aynı dosya: Türkçe kurulum uyarısı (pacman / libreoffice.org). AI paneli, işaret ve notlar sunumda çalışır.
+
+## Hata defteri, Bugün, çözüm kontrolü
+- [ ] Bir testte 2 soruyu yanlış yap: "Hata defteri: 2 kart eklendi" bildirimi çıkar. Uygulamayı kapat-aç: kartlar durur.
+- [ ] Üst çubukta "Bugün": sırası gelen kart varsa kırmızı sayı görünür; tıklayınca 3-5 maddelik liste ve tek tık düğmeler çalışır.
+- [ ] Tekrar ekranı: formüller testteki gibi görünür; Boşluk cevabı açar, 1/2 bilemedim/bildim; "Kaynağa git" doğru sayfayı açar, "Tekrara dön" geri getirir.
+- [ ] "Kart ekle": açık PDF ve sayfası kaynak olarak gelir; LaTeX önizlemesi çalışır.
+- [ ] Sınav takvimine yarınki bir ders ekle (adı PDF adına benzesin): liste o dersi ve PDF'i kaldığın sayfayla öne alır.
+- [ ] "Yapay zekayla ayrıntılandır": kısa, bugüne özel bir liste yazar; uydurma dosya adı yok.
+- [ ] Tahtada bir soruyu kalemle bilerek yanlış çöz, panelde "Çözümümü kontrol et": ilk hatalı satır kutulanır, tam çözüm verilmez, "Hata defterine ekle" kart oluşturur.
+- [ ] Aynısını PDF sayfasında bölge seçerek (C) dene: düğme seçilen bölgenin kartında da var.

@@ -23,6 +23,9 @@ import {
   actionHint, attachMarks, clearMarks, initMarks, marksSettingField, pageRegion, rulerImage, setRegion, systemWithMarks, visibleText,
 } from "./marks-ui";
 import type { Region } from "./marks-ui";
+import { marksEnabled } from "./marks-ui";
+import { CHECK_LABEL, checkCardText, checkRequest, parseCheck } from "./check";
+import { addCard } from "./mistakes-ui";
 import {
   AiError, PRESETS, currentConfig, defaultConfig, listModels, loadSettings, missing, presetOf,
   saveSettings, streamChat,
@@ -502,6 +505,63 @@ function followUp(text: string, label: string, canvas?: HTMLCanvasElement, page 
   void ask(c, { text, label, att: canvas ? { ...toImage(canvas), canvas, page, kind: "page" } : null });
 }
 
+// ------------------------------------------------------------ Çözümümü kontrol et (check.ts)
+
+function checkButton(disabled: boolean, fn: () => void, cls = "ai-action"): HTMLButtonElement {
+  const b = textBtn(CHECK_LABEL, cls, fn);
+  b.title = "Kalemle yazdığın çözümde ilk hatalı satırı bulup işaretler; tam çözümü vermez.";
+  b.disabled = disabled;
+  return b;
+}
+
+/** Görünen sayfayı (PDF ya da beyaz tahta, çizimlerle) kontrol için gönderir. */
+async function checkPage(): Promise<void> {
+  const cur = host.current();
+  const c = activeConv();
+  if (!cur || !c || c.busy) return;
+  if (missing(settings)) return render();
+  const page = cur.view.page;
+  let canvas: HTMLCanvasElement;
+  try {
+    canvas = await cur.view.capturePage(page);
+  } catch (e) {
+    host.toast("Sayfa görüntüsü alınamadı: " + errText(e));
+    return;
+  }
+  const { image, url } = toImage(canvas);
+  const region = await pageRegion(cur.view, page);
+  await checkSolution({ image: rulerImage(canvas, toImage) ?? image, url, canvas, page, kind: "page", region });
+}
+
+/** İlk hatalı satırı buldurur (işaretler attachMarks ile çizilir); hata varsa "Hata defterine ekle" düğmesi ekler. */
+async function checkSolution(att: Attachment): Promise<void> {
+  const c = activeConv();
+  const cur = host.current();
+  if (!c || !cur || c.busy) return;
+  const board = att.region?.board ?? cur.view.onBoard;
+  learnerAction("solve", cur.name, att.page);
+  const before = c.turns.length;
+  await ask(c, {
+    text: `${checkRequest(cur.name, att.page, board, marksEnabled())}\n\n${contextLine(cur.name, att.page)}`,
+    label: `${CHECK_LABEL} · ${board ? "tahta " : ""}s. ${att.page}`,
+    att,
+  });
+  const bot = c.turns[c.turns.length - 1];
+  if (c.turns.length !== before + 2 || !bot || bot.role !== "assistant" || bot.dropped) return;
+  const v = parseCheck(bot.text);
+  if (v?.status !== "hata") return;
+  const card = checkCardText(v);
+  const add = textBtn("Hata defterine ekle", "ai-chip", () => {
+    if (addCard({ src: "check", ...card, path: cur.path, name: cur.name, page: att.page })) {
+      add.disabled = true;
+      add.textContent = "Hata defterine eklendi";
+    }
+  });
+  const row = el("div", "ai-page-actions");
+  row.append(add);
+  bot.el.insertBefore(row, bot.el.querySelector(".ai-answer-tools"));
+}
+
 // ------------------------------------------------------------ Çizim (render)
 
 function render(): void {
@@ -598,6 +658,7 @@ function renderCompose(c: Conv | null): void {
       b.disabled = busy;
       actions.append(b);
     }
+    actions.append(checkButton(busy, () => void checkSolution(att))); // Çözümümü kontrol et (check.ts)
     card.append(top, actions);
     composeEl.append(card);
   } else {
@@ -610,6 +671,7 @@ function renderCompose(c: Conv | null): void {
     row.append(lessonChip(c?.path ?? null, busy));
     row.append(recordChip(busy || noDoc)); // Ders kaydı (recording-ui.ts)
     row.append(nblmChip(busy || noDoc)); // NotebookLM metni (nblm-ui.ts)
+    row.append(checkButton(busy || noDoc, () => void checkPage(), "ai-chip")); // sayfadaki/tahtadaki çözümü kontrol et
     composeEl.append(row);
   }
 

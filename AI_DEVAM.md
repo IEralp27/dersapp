@@ -7,7 +7,7 @@ Ders çalışmaya odaklı masaüstü PDF okuyucu: "sohbet penceresi değil, PDF'
 - **Yığın:** Tauri 2 (Rust çekirdek) + Vite + sade TypeScript (framework yok). Arayüz web katmanında kalacak; kullanıcı Rust'ı seviyor ama saf Rust arayüze geçilmeyecek (karar verildi).
 - **Klasör:** `C:\Users\Eralp\Desktop\dev_app_learn\dersapp`
 - **Çalıştırma:** `npm install` → `npm run tauri dev`
-- **Testler:** `node src/<dosya>.test.ts` (Node 22, TS'i doğrudan çalıştırır). Hepsi geçiyordu: calc-engine, ai/quiz, quiz-store, marks, tts-text, tts-audio, tts-engine, tts-settings, lesson, notes, learner, cli-stream, web/web, recording, nblm. `npm run build` temiz.
+- **Testler:** `node src/<dosya>.test.ts` (Node 22, TS'i doğrudan çalıştırır). Hepsi geçiyordu: calc-engine, ai/quiz, quiz-store, srs, daily-plan, check, marks, tts-text, tts-audio, tts-engine, tts-settings, lesson, notes, learner, cli-stream, web/web, recording, nblm. `npm run build` temiz.
 - Ayrıntılı dosya haritası ve kısayollar: `README.md`. MCP kurulumu: `docs/MCP.md`.
 
 ## Var olan özellikler
@@ -60,6 +60,13 @@ Kullanıcı hata çıktısı atarsa önce onu düzelt.
 - **PDF sayfaları bozuk (doğrulanmadı):** Linux'ta `WEBKIT_DISABLE_DMABUF_RENDERER=1` (kullanıcı ayarlamadıysa; `lib.rs` `run()`). Günlük gelince doğrula.
 - Linux'ta yalnızca sahte pkg-config ile `cargo check` yapıldı; gerçek derleme CI'da.
 
+## Çalışma araçları (13 Kasım, `claude/calisma-araclari` dalı, gerçek cihazda denenmedi)
+- **Hata defteri:** `srs.ts` (Leitner 1/3/7/16/35 gün, yanlış -> başa, `MistakeStore` localStorage `dersapp.mistakes.v1`), `mistakes-ui.ts` (tekrar ekranı #stage üstünde, elle kart, liste). Test bitince `quiz-view.ts` `finish2` yanlış/boşları ekler (aynı soru tekrar yanlışsa kart başa döner). Yedek: `kayit_write` ile `dersler/hata-defteri/kayit.json` (Rust değişmedi); localStorage boşsa açılışta geri yüklenir.
+- **Bugün ne çalışayım?:** `daily-plan.ts` belirlenimci puanlama (sınav ağırlığı, ders adı <-> dosya adı eşleştirme `matchCourse`), `today-ui.ts` üst çubuk düğmesi + karşılama kartı; isteğe bağlı yapay zeka (`PLAN_SYSTEM_PROMPT`, daily-plan.ts içinde). Zayıf konu eylemi testin o konudaki sorularını yeniden açar (`retryQuiz`, yapay zekasız).
+- **Çözümümü kontrol et:** `check.ts` (istem + sonuç ayrıştırma; sonuç ikinci `dersapp-marks` bloğunda `{"kontrol": ...}`), panel.ts'te `checkSolution`/`checkPage` (ek kartında ve sayfa çiplerinde düğme). İşaretler mevcut `attachMarks` ile.
+- İstemler başka ajanın panel/prompts değişikliğiyle çakışmasın diye kendi dosyalarında (check.ts, daily-plan.ts).
+- Bakılacak: gerçek modelin satırı doğru kutulaması, el yazısı okuma, sınav adı ile dosya adı eşleşmesi (gerekirse kartta ders seçimi eklenir).
+
 ## Bilinen eksikler / sıradaki fikirler
 - **Yeni ses motorları (kullanıcı istedi):** Google Cloud TTS, Azure (Microsoft) ve ElevenLabs için birer motor dosyası (`src/ai/tts-<ad>.ts`, `registerEngine` + `BytesSpeaker`; adımlar `tts.ts` başındaki yorumda). Her birinin kendi anahtar alanı ayarlarda olsun. Şu an ayarlardan yalnızca OpenAI uyumlu servisler ("Özel" sağlayıcı) eklenebiliyor. Güncel API biçimlerini resmi dokümandan doğrula.
 - **Proje GitHub'da:** https://github.com/IEralp27/dersapp (dal `main`). Değişikliklerden sonra commit + push.
@@ -67,7 +74,7 @@ Kullanıcı hata çıktısı atarsa önce onu düzelt.
 - **Hesap makinesi:** DEG kipinde türev/integral içi trigonometri dereceyle hesaplanıyor (RAD'a çevrilmeli).
 - **Ders notu PDF'i:** içindekilerde sayfa numarası yok. Üretilen PDF'lerde metin resim (seçilemiyor).
 - **Kullanıcının asıl isteği (öncelikli):** API anahtarı yerine aboneliğiyle, DersApp'in KENDİ sohbet panelinde konuşmak. MCP bunu yapamaz (MCP'de yön ters: dış uygulama DersApp'i çağırır). Claude Code CLI sağlayıcısı eklendi (yukarıya bak; `claude -p` kullanımı aboneliğin ayrı aylık Agent SDK kredisinden düşer). Kalan: "Gemini CLI" (`gemini -p`), güncel bayrakları resmi dokümandan doğrula.
-- **Fikirler:** "Çözümümü kontrol et" (tahtadaki çözümde hatalı satırı işaretle), "Bugün ne çalışayım?" (sınav takvimi + zayıf konular), hata defteri (aralıklı tekrar), "bana anlat" (öğrenci anlatır, yapay zeka eksiği bulur), PowerPoint desteği, Gemini/ChatGPT uygulamaları için uzak HTTP MCP.
+- **Fikirler:** "bana anlat" (öğrenci anlatır, yapay zeka eksiği bulur), PowerPoint desteği, Gemini/ChatGPT uygulamaları için uzak HTTP MCP.
 
 ## Çalışma kuralları
 - Önce küçük ve test edilebilir parça; mevcut kodu oku, yeniden yazma.

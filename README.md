@@ -58,6 +58,19 @@ Yapay zeka 4'er sayfalık bölümlerle başlıklı, açıklamalı bir Türkçe �
 Sonuç `.md` dosyası (`dersler/<kimlik>/`), PDF'in kulaklık listesinde görünür; "NotebookLM'e gönder" yolunu panoya kopyalar, "Kaydet" başka yere yazar.
 PDF çıktısı yok: mevcut PDF dışa aktarımı metni resim yapar ve Türkçe harfli gömülü yazı tipi yok. Mantık `ai/nblm.ts` (`node src/ai/nblm.test.ts`), pencere `ai/nblm-ui.ts`.
 
+## Hata defteri, "Bugün" ve çözüm kontrolü
+
+- **Hata defteri:** testte yanlış/boş bırakılan her soru kendiliğinden karta dönüşür (elle de eklenir: soru, cevap, neden, kaynak sayfa).
+  Kartlar 1, 3, 7, 16, 35 gün sonra yeniden sorulur; "Bilemedim" başa döndürür. Tekrar internetsiz ve yapay zekasızdır
+  (Boşluk: cevabı göster, 1: bilemedim, 2: bildim). Kartlar localStorage'da, yedeği veri klasöründe `dersler/hata-defteri/kayit.json`.
+- **Bugün (üst çubuk, sınav rozetinin yanı; karşılama ekranı):** sınav takvimi, sırası gelen kartlar, zayıf konular ve son açılan
+  dosyalardan bugünlük 3-5 madde; her maddede tek tık (tekrara başla, dosyayı sayfasında aç, zayıf konunun sorularını yeniden çöz).
+  Yapay zeka çağrısı yok; "Yapay zekayla ayrıntılandır" isteğe bağlı. Kırmızı sayı: bugün sorulacak kart.
+- **Çözümümü kontrol et (yapay zeka paneli):** tahtada ya da sayfada kalemle çözdüğün soruyu gönderir (bölge seçiliyse o bölge,
+  değilse görünen sayfa/tahta). İlk hatalı satır sayfada işaretlenir, kısa açıklanır, tam çözüm verilmez; hata varsa "Hata defterine ekle".
+- Mantık: `ai/srs.ts`, `ai/daily-plan.ts`, `ai/check.ts` (testler: `node src/ai/srs.test.ts`, `daily-plan.test.ts`, `check.test.ts`);
+  arayüz `ai/mistakes-ui.ts`, `ai/today-ui.ts`.
+
 ## Kendi yapay zeka uygulamanı bağlama (MCP)
 
 Claude Desktop, Claude Code, Gemini CLI gibi uygulamalar DersApp'e bağlanıp açık PDF'i okuyabilir ve test gönderebilir. Kurulum: `docs/MCP.md`.

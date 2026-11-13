@@ -23,6 +23,7 @@ import type { Attempt, SavedQuiz } from "./quiz-store";
 import "./quiz.css";
 import { notesPlan } from "./notes";
 import { learnerQuizDone, learnerQuizHint } from "./learner-ui";
+import { addFromQuiz } from "./mistakes-ui";
 
 export interface StudyHost {
   current(): { path: string; name: string; view: PdfView } | null;
@@ -753,6 +754,15 @@ export function openExternalQuiz(saved: SavedQuiz): boolean {
   return ok;
 }
 
+/** Geçmişteki bir testin verilen sorularını yeniden çözdürür ("Bugün ne çalışayım?" zayıf konu). Test yoksa false. */
+export function retryQuiz(id: string, ids: number[]): boolean {
+  const saved = store.get(id);
+  if (!saved) return false;
+  const valid = ids.filter((i) => i >= 0 && i < saved.quiz.questions.length);
+  startSession(saved, valid.length ? valid : undefined);
+  return true;
+}
+
 function topBar(title: string, meta: string, right: HTMLElement[], onClose: () => void, closeTitle: string): HTMLElement {
   const bar = el("div", "qz-top");
   const t = el("div", "qz-top-title");
@@ -925,6 +935,7 @@ function finish2(): void {
   saved.attempts.push(attempt);
   if (!store.put(saved)) host.toast("Sonuç geçmişe kaydedilemedi (depolama dolu).");
   learnerQuizDone(saved.name, sc, attempt.ms);
+  addFromQuiz(saved, attempt); // yanlış/boş sorular hata defterine (mistakes-ui.ts)
   showResult(saved, attempt);
 }
 

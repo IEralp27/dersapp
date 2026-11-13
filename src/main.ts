@@ -7,6 +7,8 @@ import { BOARD_TAB, PdfError, PdfView } from "./viewer";
 import type { ToolState, ViewPos } from "./viewer";
 import { initCalculator } from "./calc";
 import { initExams } from "./exams";
+import { initMistakes } from "./ai/mistakes-ui";
+import { initToday } from "./ai/today-ui";
 import { initMcp } from "./mcp";
 import { initTextPlace } from "./text-place";
 import { NOTEBOOKLM_URL, hostLabel, isNotebookLm, normalizeInput } from "./web/url";
@@ -888,6 +890,10 @@ async function init(): Promise<void> {
   buildTools();
   calc = initCalculator();
   initExams();
+  initMistakes({ // hata defteri (ai/mistakes-ui.ts)
+    toast,
+    current: () => (active?.view && !active.data ? { path: active.path, name: active.name, page: active.view.page } : null),
+  });
   initTextPlace();
   initAi({
     current: () => (active?.view ? { path: active.path, name: active.name, view: active.view } : null),
@@ -976,6 +982,8 @@ async function init(): Promise<void> {
   if (first) activate(first);
   renderTabs();
   renderSidebar();
+  // "Bugün ne çalışayım?" (ai/today-ui.ts): son açılanlar kaldığı sayfayla
+  initToday({ toast, recent: () => saved.recent.map((r) => ({ ...r, page: saved.pos[r.path]?.page ?? 1 })) });
 
   // Geliştirme kolaylığı: tarayıcıda ?open=/dosya.pdf ile doğrudan aç
   const direct = new URLSearchParams(location.search).get("open");
