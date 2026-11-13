@@ -18,6 +18,10 @@ export interface AiTabHost {
   toast(text: string, kind?: "error" | "info"): void;
   /** Sekme başlığı değişti (ilk mesajdan) */
   title(id: string, title: string): void;
+  /** Geçmişten aç: sekmesi açıksa öne getirir, değilse yeni sekme olarak açar */
+  openConv(id: string): void;
+  /** Geçmişten sil: açık sekmesi varsa kapatır, konuşmayı kalıcı siler */
+  forgetConv(id: string): void;
 }
 
 /** Sistem talimatına eklenen not: bu sohbet bir sayfaya/görüntüye bağlı değil. */
@@ -65,6 +69,16 @@ export function pruneAiTabs(keep: string[]): void {
   store?.prune(keep);
 }
 
+/** Geçmişten açılan konuşmanın kapalı işaretini kaldırır; konuşma yoksa false. */
+export function reopenAiConv(id: string): boolean {
+  return store?.reopen(id) ?? false;
+}
+
+/** Konuşmayı kalıcı siler (geçmişten). */
+export function deleteAiConv(id: string): void {
+  store?.remove(id);
+}
+
 export class AiTab {
   readonly id: string;
   /** Sekmenin içerik alanı (#stage içinde) */
@@ -100,7 +114,14 @@ export class AiTab {
     gear.setAttribute("aria-label", gear.title);
     gear.innerHTML = svg(ICONS.gear);
     gear.addEventListener("click", () => openAiSettings());
-    head.append(title, gear);
+    const hist = el("button", "ai-chip", "Geçmiş");
+    hist.title = "Önceki sohbetler";
+    hist.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (this.picker) this.closePicker();
+      else this.openHistory(hist);
+    });
+    head.append(title, hist, gear);
 
     this.main = el("div", "ai-main ai-tab-main");
     this.compose = el("div", "ai-compose ai-tab-compose");
@@ -183,12 +204,12 @@ export class AiTab {
     setChatTarget(null);
   }
 
-  /** Sekme kapandı: konuşma silinir. */
+  /** Sekme kapandı: konuşma geçmişte kalır (boşsa silinir). */
   dispose(): void {
     this.conv.busy?.abort();
     this.hide();
     this.el.remove();
-    store?.remove(this.id);
+    store?.close(this.id);
   }
 
   private save(): void {
@@ -341,6 +362,61 @@ export class AiTab {
     this.el.append(box);
     this.picker = box;
     (box.firstElementChild as HTMLElement | null)?.focus();
+    setTimeout(() => document.addEventListener("click", this.outside), 0);
+  }
+
+  private openHistory(anchor: HTMLElement): void {
+    const box = el("div", "ai-tab-picker ai-tab-history");
+    const fill = () => {
+      const items = store?.history() ?? [];
+      box.replaceChildren();
+      if (!items.length) box.append(el("p", "ai-hist-empty", "Henüz sohbet geçmişi yok."));
+      for (const h of items) {
+        const row = el("div", "ai-hist-row");
+        const b = el("button", "ai-hist-open");
+        b.append(el("span", "ai-hist-title", h.title), el("small", "", `${new Date(h.updated).toLocaleDateString("tr-TR")} · ${h.count} mesaj${h.open ? " · açık" : ""}`));
+        b.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this.closePicker();
+          host.openConv(h.id);
+        });
+        const del = el("button", "ai-hist-del", "Sil");
+        del.title = "Bu sohbeti kalıcı olarak sil";
+        let armed = false;
+        del.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (!armed) {
+            armed = true;
+            del.textContent = "Emin misin?";
+            del.classList.add("on");
+            setTimeout(() => {
+              armed = false;
+              del.textContent = "Sil";
+              del.classList.remove("on");
+            }, 3000);
+            return;
+          }
+          if (h.id === this.id) this.closePicker();
+          host.forgetConv(h.id);
+          if (h.id !== this.id) fill();
+        });
+        row.append(b, del);
+        box.append(row);
+      }
+    };
+    fill();
+    box.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        this.closePicker();
+      }
+    });
+    const r = anchor.getBoundingClientRect();
+    const pr = this.el.getBoundingClientRect();
+    box.style.right = pr.right - r.right + "px";
+    box.style.top = r.bottom - pr.top + 4 + "px";
+    this.el.append(box);
+    this.picker = box;
     setTimeout(() => document.addEventListener("click", this.outside), 0);
   }
 
