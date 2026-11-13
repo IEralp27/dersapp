@@ -35,6 +35,8 @@ interface Tab {
   web?: WebState;
   /** Yapay zeka sekmesi (ai/ai-tab.ts); yolu "ai:<kimlik>" */
   ai?: AiTab;
+  /** Sunum: önbellekteki dönüştürülmüş PDF'in yolu (yapay zeka bunu okur; ad/not anahtarı özgün dosyada) */
+  pdfPath?: string;
 }
 
 interface WebState {
@@ -212,6 +214,7 @@ async function builtinPptx(bytes: Uint8Array, name: string): Promise<Uint8Array>
 /** Sekmeyi LibreOffice ile yeniden açar (seçim hatırlanır). */
 function reopenWithLo(tab: Tab): void {
   loPaths.add(tab.path);
+  tab.pdfPath = undefined;
   localStorage.setItem(LO_KEY, JSON.stringify([...loPaths].slice(-200)));
   if (tab.view) {
     saved.pos[tab.path] = tab.view.getPos();
@@ -226,7 +229,8 @@ function reopenWithLo(tab: Tab): void {
 async function presentationPdf(tab: Tab): Promise<Uint8Array> {
   if (!isPptx(tab.path) || loPaths.has(tab.path)) {
     toast("Sunum LibreOffice ile PDF'e çevriliyor…", "info");
-    return backend.readPdf(await backend.officeToPdf(tab.path));
+    tab.pdfPath = await backend.officeToPdf(tab.path);
+    return backend.readPdf(tab.pdfPath);
   }
   const info = await backend.officeInfo(tab.path);
   const offer = () => {
@@ -238,6 +242,7 @@ async function presentationPdf(tab: Tab): Promise<Uint8Array> {
   const hit = await backend.officeCacheGet(key).catch(() => null);
   if (hit) {
     offer();
+    tab.pdfPath = hit;
     return backend.readPdf(hit);
   }
   let pdf: Uint8Array;
@@ -249,7 +254,10 @@ async function presentationPdf(tab: Tab): Promise<Uint8Array> {
     else toast(why + " LibreOffice kurulursa onunla açılabilir (libreoffice.org).");
     throw new ShownError(why);
   }
-  await backend.officeCachePut(key, pdf).catch((e) => console.error("Sunum önbelleğe yazılamadı", e));
+  tab.pdfPath = await backend.officeCachePut(key, pdf).catch((e) => {
+    console.error("Sunum önbelleğe yazılamadı", e);
+    return undefined;
+  });
   offer();
   return pdf;
 }
@@ -1019,16 +1027,17 @@ async function init(): Promise<void> {
   });
   initTextPlace();
   initAi({
-    current: () => (active?.view ? { path: active.path, name: active.name, view: active.view } : null),
+    current: () => (active?.view ? { path: active.path, name: active.name, view: active.view, pdf: active.pdfPath } : null),
     web: () => (active?.web?.opened ? { path: active.path, name: active.name, label: active.web.label, url: active.web.url } : null),
     toast,
     // Dosyalara eriş (ai/ajan-ui.ts)
     folder: () => saved.folder,
     docs: () => pdfTabs().filter((t) => !t.data && t.path !== BOARD_TAB).map((t) => t.path),
+    converted: () => pdfTabs().flatMap((t) => (t.pdfPath ? [{ path: t.path, name: t.name, pdf: t.pdfPath }] : [])),
     openAt: (path, page) => void openAt(path, page),
   });
   initAiTabs({ // yapay zeka sekmesi: ek seçicideki açık PDF'ler, başlık ilk mesajdan
-    docs: () => pdfTabs().filter((t) => t.path !== BOARD_TAB).map((t) => ({ path: t.path, name: t.name, view: t.view })),
+    docs: () => pdfTabs().filter((t) => t.path !== BOARD_TAB).map((t) => ({ path: t.path, name: t.name, view: t.view, pdf: t.pdfPath })),
     toast,
     title: (id, title) => {
       const t = tabs.find((x) => x.ai?.id === id);

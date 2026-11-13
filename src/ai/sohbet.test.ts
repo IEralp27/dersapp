@@ -106,6 +106,9 @@ t("ekli belgeler: API sağlayıcısında sayfa metni, ajanda yol", () => {
   const cli = docsContext(docs, true);
   assert.ok(cli.includes("(yol: /d/ders.pdf)"));
   assert.ok(!cli.includes("Laplace"));
+  const pres = docsContext([{ name: "s.pptx", path: "/d/s.pptx", page: 2, pdf: "/data/office/ic1-a/sunum.pdf" }], true);
+  assert.ok(pres.includes("- s.pptx, açık sayfa 2 (sunum; şu PDF olarak oku: /data/office/ic1-a/sunum.pdf; sayfa = slayt)"));
+  assert.ok(!pres.includes("yol: /d/s.pptx"));
   assert.ok(docsContext([{ ...docs[0], text: "x".repeat(50) }], false, 10).includes("x".repeat(10) + " …(kısaltıldı)"));
 });
 

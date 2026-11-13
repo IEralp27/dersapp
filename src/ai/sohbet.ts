@@ -216,6 +216,8 @@ export interface DocContext {
   pages?: number;
   /** Şu anki sayfanın metni (yüklüyse) */
   text?: string;
+  /** Sunumsa okunacak dönüştürülmüş PDF (sayfa = slayt) */
+  pdf?: string;
 }
 
 /** Ekli PDF'lerin modele giden notu. agent: Claude Code CLI dosyaları kendisi okuyabilir (yalnızca yol yeter). */
@@ -226,7 +228,8 @@ export function docsContext(docs: DocContext[], agent: boolean, maxText = 6000):
     : "Öğrenci şu belgeleri bu soruya ekledi (her birinin açık olduğu sayfanın metni aşağıda):"];
   for (const d of docs) {
     const where = d.page ? `, açık sayfa ${d.page}${d.pages ? "/" + d.pages : ""}` : "";
-    lines.push(`- ${d.name}${where}${agent ? ` (yol: ${d.path})` : ""}`);
+    const loc = d.pdf ? ` (sunum; şu PDF olarak oku: ${d.pdf}; sayfa = slayt)` : ` (yol: ${d.path})`;
+    lines.push(`- ${d.name}${where}${agent ? loc : ""}`);
   }
   if (!agent) {
     for (const d of docs) {
@@ -235,6 +238,6 @@ export function docsContext(docs: DocContext[], agent: boolean, maxText = 6000):
       lines.push("", `## ${d.name} s.${d.page ?? "?"}`, t.length > maxText ? t.slice(0, maxText) + " …(kısaltıldı)" : t);
     }
   }
-  lines.push("", "Kaynak gösterirken [dosya.pdf s.12] biçimini kullan.");
+  lines.push("", "Kaynak gösterirken [dosya.pdf s.12] biçimini kullan (sunumda özgün ad: [sunum.pptx s.3]).");
   return lines.join("\n");
 }

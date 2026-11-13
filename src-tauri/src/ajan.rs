@@ -13,8 +13,8 @@ use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 use tauri::{ipc::Response, AppHandle, Manager};
 
-/// Aranacak dosya türleri.
-const EXTS: [&str; 3] = ["pdf", "md", "txt"];
+/// Aranacak dosya türleri (.pptx: metni arayüzde slayt slayt çıkarılır, `sunum-metin/`e yazılır).
+const EXTS: [&str; 4] = ["pdf", "md", "txt", "pptx"];
 /// Klasör ağacında en çok bu kadar iner, en çok bu kadar dosya listeler.
 const MAX_DEPTH: usize = 6;
 const MAX_FILES: usize = 600;
@@ -143,11 +143,11 @@ pub fn list_files(roots: &[PathBuf]) -> Vec<FileEntry> {
     out
 }
 
-/// Bir dosyayı okur (yalnızca kökler içinde, yalnızca PDF/.md/.txt).
+/// Bir dosyayı okur (yalnızca kökler içinde, yalnızca PDF/.md/.txt/.pptx).
 pub fn read_file(roots: &[PathBuf], path: &str) -> Result<Vec<u8>, String> {
     let real = check_path(roots, path)?;
     if !wanted(&real) {
-        return Err("Yalnızca PDF, .md ve .txt dosyaları okunabilir.".into());
+        return Err("Yalnızca PDF, .pptx, .md ve .txt dosyaları okunabilir.".into());
     }
     let meta = fs::metadata(&real).map_err(|e| format!("Dosya okunamadı: {e}"))?;
     if !meta.is_file() || meta.len() > MAX_BYTES {
@@ -164,6 +164,22 @@ fn cache_file(app: &AppHandle, path: &str) -> Result<PathBuf, String> {
         h = h.wrapping_mul(0x100000001b3);
     }
     Ok(data_dir(app)?.join("ajan-metin").join(format!("{h:016x}.json")))
+}
+
+/// Sunum metin sürümünün adı: `[A-Za-z0-9_-]` + `.md` (ajan.ts `slidesFileName`).
+fn valid_slides_name(name: &str) -> bool {
+    match name.strip_suffix(".md") {
+        Some(stem) => {
+            !stem.is_empty()
+                && stem.len() <= 80
+                && stem.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+        }
+        None => false,
+    }
+}
+
+fn slides_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(data_dir(app)?.join("sunum-metin"))
 }
 
 fn data_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -185,6 +201,31 @@ pub async fn ajan_app_dir(app: AppHandle) -> Result<String, String> {
     let d = data_dir(&app)?.join("dersler");
     fs::create_dir_all(&d).map_err(|e| format!("Klasör oluşturulamadı: {e}"))?;
     Ok(plain(&d))
+}
+
+/// Sunumların metin sürümlerinin klasörü (`sunum-metin/`); yoksa oluşturur. Ajan bunu kök olarak okur.
+#[tauri::command]
+pub async fn ajan_slides_dir(app: AppHandle) -> Result<String, String> {
+    let d = slides_dir(&app)?;
+    fs::create_dir_all(&d).map_err(|e| format!("Klasör oluşturulamadı: {e}"))?;
+    Ok(plain(&d))
+}
+
+/// Sunumun metin sürümünü yazar (içerik aynıysa dokunmaz); yolunu döndürür.
+#[tauri::command]
+pub async fn ajan_slides_put(app: AppHandle, name: String, md: String) -> Result<String, String> {
+    if !valid_slides_name(&name) {
+        return Err("Geçersiz dosya adı.".into());
+    }
+    if md.len() > 20 * 1024 * 1024 {
+        return Err("Sunum metni çok büyük.".into());
+    }
+    let p = slides_dir(&app)?.join(&name);
+    if fs::read_to_string(&p).map(|old| old == md).unwrap_or(false) {
+        return Ok(plain(&p));
+    }
+    crate::store::write_atomic(&p, &md)?;
+    Ok(plain(&p))
 }
 
 #[tauri::command]
@@ -255,6 +296,14 @@ mod tests {
         let (ok, _) = canonical_roots(&[ders.to_string_lossy().into_owned()]);
         assert!(read_file(&ok, &ders.join("bag.pdf").to_string_lossy()).is_err());
         assert!(list_files(&ok).is_empty());
+    }
+
+    #[test]
+    fn slides_name() {
+        assert!(valid_slides_name("guc-sunum-0123abcd.md"));
+        assert!(!valid_slides_name("../x.md"));
+        assert!(!valid_slides_name("a.txt"));
+        assert!(!valid_slides_name(".md"));
     }
 
     #[test]

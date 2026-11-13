@@ -11,7 +11,7 @@ import { renderMarkdown } from "./markdown";
 import { initStudy, studyRow, dialogOpen } from "./quiz-view";
 import { recordChip } from "./recording-ui";
 import { nblmChip } from "./nblm-ui";
-import { agentOptions, agentSystem, ajanRow, initAjan, linkCitations } from "./ajan-ui";
+import { agentOptions, agentSystem, ajanRow, ajanSync, initAjan, linkCitations } from "./ajan-ui";
 import { initLearner, learnerAction, profileEntry, profileView, systemWithProfile } from "./learner-ui";
 import {
   initLesson, lessonChip, lessonCompose, lessonInput, lessonInterrupt, lessonPlaceholder, lessonSync, lessonTakesInput,
@@ -34,14 +34,16 @@ import {
 import type { ChatImage, ChatMessage, ModelInfo, Settings } from "./providers";
 
 export interface AiHost {
-  /** Etkin sekme (PDF'i yüklenmişse) */
-  current(): { path: string; name: string; view: PdfView } | null;
+  /** Etkin sekme (PDF'i yüklenmişse); sunumsa `pdf` önbellekteki dönüştürülmüş PDF (yapay zeka onu okur) */
+  current(): { path: string; name: string; view: PdfView; pdf?: string } | null;
   /** Etkin web sekmesi (sayfası açılmışsa); metni "Bu sayfayı anlat" için Rust'tan indirilir */
   web?(): WebCurrent | null;
   toast(text: string, kind?: "error" | "info"): void;
   /** Dosyalara eriş (ajan-ui.ts): çalışma klasörü, açık PDF'ler, dosyayı sayfada açma */
   folder?(): string | null;
   docs?(): string[];
+  /** Açık sunumlar (özgün yol/ad + dönüştürülmüş PDF) */
+  converted?(): { path: string; name: string; pdf: string }[];
   openAt?(path: string, page: number): void;
 }
 
@@ -335,6 +337,7 @@ async function ask(c: Conv, q: AskInput, s: ChatSurface = panelSurface): Promise
   };
 
   try {
+    await ajanSync(); // yeni açılan sunumun PDF'i de okunabilir kök olsun
     await streamChat({
       presetId, config, system: agentSystem(s.system()), messages, signal: ctrl.signal,
       agent: agentOptions(wrap), // Dosyalara eriş (yalnızca Claude Code CLI)
@@ -1221,6 +1224,7 @@ export function initAi(h: AiHost): void {
   });
   initAjan({
     folder: () => host.folder?.() ?? null, docs: () => host.docs?.() ?? [], current: () => host.current(),
+    converted: () => host.converted?.() ?? [],
     openAt: (path, page) => host.openAt?.(path, page), isCli: () => currentConfig(settings).protocol === "cli",
     query: (take) => {
       if (target) return target.query(take);

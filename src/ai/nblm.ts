@@ -132,7 +132,7 @@ export interface NblmDoc {
   parts: NblmPart[];
 }
 
-export const docTitle = (name: string) => name.replace(/\.pdf$/i, "").trim() || "Ders";
+export const docTitle = (name: string) => name.replace(/\.(pdf|pptx|ppt|odp)$/i, "").trim() || "Ders";
 
 /** Tek Markdown belgesi: başlık, kaynak satırı, bölümler, sonda "Kısa tekrar" (dilim özetleri). */
 export function assembleSource(d: NblmDoc): string {

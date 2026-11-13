@@ -28,7 +28,7 @@ export const CHECK_LABEL = "Çözümümü kontrol et";
 
 /** Panel isteği. `marks`: işaretleme açık mı (kapalıysa koordinat istenmez). */
 export function checkRequest(name: string, page: number, board: boolean, marks: boolean): string {
-  const where = board ? "beyaz tahta" : `"${name.replace(/\.pdf$/i, "")}", sayfa ${page}`;
+  const where = board ? "beyaz tahta" : `"${name.replace(/\.(pdf|pptx|ppt|odp)$/i, "")}", sayfa ${page}`;
   return `Bu görüntüde benim (öğrencinin) kalemle yazdığım bir çözüm var (${where}). Çözümümü kontrol et.
 
 - Satır satır ilerle: her satır bir öncekinden doğru çıkıyor mu (formül seçimi, yerine koyma, işlem, işaret, birim, ondalık)?

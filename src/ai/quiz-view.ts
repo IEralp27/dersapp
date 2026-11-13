@@ -566,7 +566,7 @@ async function makeSummary(pages: number[]): Promise<void> {
     if (ctrl.signal.aborted) throw new DOMException("İptal", "AbortError");
     job = null;
     closeDialog();
-    await saveAndOpen(`${fileSafe(cur.name.replace(/\.pdf$/i, ""))} - özet ${pagesLabel(pages).replace("s. ", "s")}`, bytes, title);
+    await saveAndOpen(`${fileSafe(cur.name.replace(/\.(pdf|pptx|ppt|odp)$/i, ""))} - özet ${pagesLabel(pages).replace("s. ", "s")}`, bytes, title);
   } catch (e) {
     job = null;
     if ((e as Error)?.name === "AbortError") {

@@ -167,7 +167,7 @@ ${text}
 
 /** Belge bağlamı: hangi dosyanın hangi sayfası olduğunu modele söyler. */
 export function contextLine(name: string, page: number): string {
-  return `(Belge: "${name.replace(/\.pdf$/i, "")}", sayfa ${page})`;
+  return `(Belge: "${name.replace(/\.(pdf|pptx|ppt|odp)$/i, "")}", sayfa ${page})`;
 }
 
 // ------------------------------------------------------------ Sayfada işaretleme
@@ -327,7 +327,7 @@ Bulunan sorunlar:`;
 /** Kullanıcı mesajı: test isteği. */
 export function quizRequest(o: { count: number; difficulty: QuizDifficulty; kind: QuizKind; pages: string; name: string }): string {
   return `${o.pages}
-Belge: "${o.name.replace(/\.pdf$/i, "")}"
+Belge: "${o.name.replace(/\.(pdf|pptx|ppt|odp)$/i, "")}"
 
 Bu içerikten ${o.count} soruluk bir test hazırla.
 ${QUIZ_DIFFICULTY[o.difficulty]}
@@ -362,7 +362,7 @@ export const SUMMARY_SYSTEM_PROMPT = `Sen DersApp içindeki ders öğretmenisin.
 /** Kullanıcı mesajı: özet isteği. */
 export function summaryRequest(pages: string, name: string): string {
   return `${pages}
-Belge: "${name.replace(/\.pdf$/i, "")}"
+Belge: "${name.replace(/\.(pdf|pptx|ppt|odp)$/i, "")}"
 
 Bu sayfaların yazdırılabilir çalışma özetini yaz.`;
 }
@@ -517,7 +517,7 @@ soru: (ikinci soru) || (cevabı)
 /** Ders notu dilim isteği. */
 export function notesRequest(o: { pages: string; name: string; part: number; parts: number; carried: string }): string {
   return `${o.pages}
-Belge: "${o.name.replace(/\.pdf$/i, "")}" — parça ${o.part} / ${o.parts}.
+Belge: "${o.name.replace(/\.(pdf|pptx|ppt|odp)$/i, "")}" — parça ${o.part} / ${o.parts}.
 ${o.carried ? `Önceki parçanın özeti (bağlam; tekrar yazma): ${o.carried}` : "Bu ilk parça."}
 
 Bu sayfaların ders notunu yaz. Yanıtın en sonunda not bloğu olsun.`;
@@ -591,7 +591,7 @@ export function recordRequest(o: {
 }): string {
   const list = o.pages.map((p, i) => `${i + 1}. görüntü = sayfa ${p}`).join(", ");
   return [
-    `Belge: "${o.name.replace(/\.pdf$/i, "")}". Kayıt aralığı: sayfa ${o.from}-${o.to}. Bu istek: bölüm ${o.part} / ${o.parts}.`,
+    `Belge: "${o.name.replace(/\.(pdf|pptx|ppt|odp)$/i, "")}". Kayıt aralığı: sayfa ${o.from}-${o.to}. Bu istek: bölüm ${o.part} / ${o.parts}.`,
     `Görüntüler sırayla PDF'in şu sayfalarıdır: ${list}.`,
     o.carried ? `Önceki bölümlerin özeti (bağlam; tekrar anlatma):\n${o.carried}` : "Bu, kaydın ilk bölümü.",
     LESSON_PACE[o.pace],
@@ -641,7 +641,7 @@ export function nblmRequest(o: {
   const list = o.pages.map((p, i) => `${i + 1}. görüntü = sayfa ${p}`).join(", ");
   const texts = o.pages.map((p, i) => (o.texts[i]?.trim() ? `Sayfa ${p} metni:\n${o.texts[i].trim()}` : "")).filter(Boolean);
   return [
-    `Belge: "${o.name.replace(/\.pdf$/i, "")}". Aralık: sayfa ${o.from}-${o.to}. Bu istek: parça ${o.part} / ${o.parts}.`,
+    `Belge: "${o.name.replace(/\.(pdf|pptx|ppt|odp)$/i, "")}". Aralık: sayfa ${o.from}-${o.to}. Bu istek: parça ${o.part} / ${o.parts}.`,
     `Görüntüler sırayla PDF'in şu sayfalarıdır: ${list}.`,
     texts.length ? `PDF'ten çıkarılan metin (formüller bozuk olabilir; asıl kaynak görüntüdür):\n\n${texts.join("\n\n")}` : "",
     o.carried ? `Önceki parçaların özeti (bağlam; tekrar yazma):\n${o.carried}` : "Bu ilk parça.",

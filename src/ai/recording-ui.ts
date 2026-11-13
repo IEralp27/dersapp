@@ -379,7 +379,7 @@ function showHome(): void {
     const r = pick();
     if (!r || !engineSel.value || !ready()) return;
     const m: RecManifest = {
-      v: 1, id: newId(), pdf: cur.path, name: cur.name, title: `${cur.name.replace(/\.pdf$/i, "")} · s. ${r[0]}-${r[1]}`,
+      v: 1, id: newId(), pdf: cur.path, name: cur.name, title: `${cur.name.replace(/\.(pdf|pptx|ppt|odp)$/i, "")} · s. ${r[0]}-${r[1]}`,
       created: Date.now(), updated: Date.now(), from: r[0], to: r[1], pace, instructions: instr.value.trim().slice(0, 600),
       engine: engineSel.value, engineName: "", status: "script", chunks: planChunks(range1(r[0], r[1]), PAGES_PER_CHUNK),
       doneChunks: 0, carried: [], segments: [], spans: [], duration: 0, audio: null,

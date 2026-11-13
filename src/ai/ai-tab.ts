@@ -14,7 +14,8 @@ import type { DocContext } from "./sohbet";
 
 export interface AiTabHost {
   /** Açık PDF sekmeleri (ek seçici) */
-  docs(): { path: string; name: string; view: PdfView | null }[];
+  /** pdf: sunumsa önbellekteki dönüştürülmüş PDF (CLI ajanı onu okur) */
+  docs(): { path: string; name: string; view: PdfView | null; pdf?: string }[];
   toast(text: string, kind?: "error" | "info"): void;
   /** Sekme başlığı değişti (ilk mesajdan) */
   title(id: string, title: string): void;
@@ -246,7 +247,7 @@ export class AiTab {
           const v = d.view?.docView; // beyaz tahtadayken de PDF'in kendisi
           const pdf = !!v?.isPdf;
           const text = !agent && pdf ? await v!.pageText(v!.page).catch(() => "") : undefined;
-          ctx.push({ name: d.name, path: d.path, page: pdf ? v!.page : undefined, pages: pdf ? v!.pageCount : undefined, text });
+          ctx.push({ name: d.name, path: d.path, page: pdf ? v!.page : undefined, pages: pdf ? v!.pageCount : undefined, text, pdf: d.pdf });
         }
         extra = docsContext(ctx, agent);
       } finally {

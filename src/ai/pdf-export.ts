@@ -232,7 +232,7 @@ export async function quizToPdf(o: QuizPdfInput): Promise<Uint8Array> {
   const head = h("div", "qz-p-head");
   head.append(h("h1", "", o.quiz.title));
   head.append(h("div", "qz-p-meta",
-    [o.name.replace(/\.pdf$/i, ""), pagesText(o.pages), DIFF_LABEL[o.difficulty] ?? "", `${o.quiz.questions.length} soru`, dateText(Date.now())]
+    [o.name.replace(/\.(pdf|pptx|ppt|odp)$/i, ""), pagesText(o.pages), DIFF_LABEL[o.difficulty] ?? "", `${o.quiz.questions.length} soru`, dateText(Date.now())]
       .filter(Boolean).join("  ·  ")));
   const id = h("div", "qz-p-id");
   id.append(h("span", "", "Ad Soyad: ________________________________"), h("span", "", "No: ____________"), h("span", "", "Puan: ______"));
@@ -274,7 +274,7 @@ export async function summaryToPdf(markdown: string, name: string, pages: number
   title ||= "Çalışma özeti";
   const head = h("div", "qz-p-head");
   head.append(h("h1", "", title));
-  head.append(h("div", "qz-p-meta", [name.replace(/\.pdf$/i, ""), pagesText(pages), "Yapay zeka özeti", dateText(Date.now())].filter(Boolean).join("  ·  ")));
+  head.append(h("div", "qz-p-meta", [name.replace(/\.(pdf|pptx|ppt|odp)$/i, ""), pagesText(pages), "Yapay zeka özeti", dateText(Date.now())].filter(Boolean).join("  ·  ")));
   blocks.push({ el: head });
   for (const el of [...root.children] as HTMLElement[]) {
     const wrap = h("div", "qz-p-md");

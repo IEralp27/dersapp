@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import {
   agentNote, baseName, citeLabel, computeRoots, dirOf, fold, isUnder, normPath, parseCitations, queryTerms,
   resolveCitation, searchContext, searchDocs, shortRoot, snippet, toolStatus,
+  aliasFiles, resolveDocCitation, samePath, slidesFileName,
 } from "./ajan.ts";
+import type { ListedFile } from "./ajan.ts";
 
 const same = (a: unknown, b: unknown) => assert.equal(JSON.stringify(a), JSON.stringify(b));
 let count = 0;
@@ -108,6 +110,39 @@ t("bağlam bloğu ve ajan notu", () => {
   assert.ok(n.includes("- /home/e/Okul (çalışma klasörü)"));
   assert.ok(n.includes("\"a.pdf\" belgesinin 3. sayfasına"));
   assert.ok(n.includes("[dosya.pdf s.12]"));
+});
+
+t("sunumlar: PDF yolu, metin dosyası adı, takma ad, atıf", () => {
+  const conv = [{ path: "C:\\Ders\\Güç Sunum.pptx", name: "Güç Sunum.pptx", pdf: "C:/Data/office/ic1-ab/sunum.pdf" }];
+  assert.ok(samePath("c:/ders/güç sunum.pptx", conv[0].path));
+  const f = slidesFileName(conv[0].path);
+  assert.match(f, /^guc-sunum-[0-9a-f]{8}\.md$/);
+  assert.equal(f, slidesFileName("c:/ders/GÜÇ SUNUM.pptx".replace("GÜÇ SUNUM", "Güç Sunum")));
+  assert.ok(f !== slidesFileName("C:/Diger/Güç Sunum.pptx"));
+  const files: ListedFile[] = [
+    { path: "C:/Data/office/ic1-ab/sunum.pdf", name: "sunum.pdf", size: 1, modified: 1 },
+    { path: "C:/Data/sunum-metin/guc.md", name: "guc.md", size: 1, modified: 1 },
+    { path: "C:/Ders/a.pdf", name: "a.pdf", size: 1, modified: 1 },
+  ];
+  same(aliasFiles(files, conv, ["C:/Data/sunum-metin"]).map((x) => [x.path, x.name, x.read ?? ""]),
+    [[conv[0].path, "Güç Sunum.pptx", "C:/Data/office/ic1-ab/sunum.pdf"], ["C:/Ders/a.pdf", "a.pdf", ""]]);
+  // .pptx zaten listedeyse PDF tekrar sayılmaz
+  assert.equal(aliasFiles([...files, { path: "C:/Ders/Güç Sunum.pptx", name: "Güç Sunum.pptx", size: 1, modified: 1 }], conv, []).length, 3);
+  const known = ["C:/Ders/a.pdf", conv[0].path];
+  assert.equal(resolveDocCitation("Güç Sunum.pptx", known, conv), conv[0].path);
+  assert.equal(resolveDocCitation("sunum.pdf", known, conv), conv[0].path);
+  assert.equal(resolveDocCitation("Güç Sunum.pdf", known, conv), conv[0].path);
+  assert.equal(resolveDocCitation("a.pdf", known, conv), "C:/Ders/a.pdf");
+  assert.equal(resolveDocCitation("yok.pdf", known, conv), null);
+  assert.equal(parseCitations("[Güç Sunum.pptx s.5]")[0].page, 5);
+  const n = agentNote({
+    roots: ["C:/Ders"], converted: conv,
+    doc: { path: conv[0].path, name: "Güç Sunum.pptx", page: 2, pages: 9, pdf: conv[0].pdf },
+    slides: { dir: "C:/Data/sunum-metin", files: [{ name: "b.pptx", file: "b-1.md" }] },
+  });
+  assert.ok(n.includes('"Güç Sunum.pptx" sunumu şu PDF olarak okunabilir: C:/Data/office/ic1-ab/sunum.pdf; sayfa = slayt'));
+  assert.ok(!n.includes("Açık diğer sunumlar"));
+  assert.ok(n.includes("C:/Data/sunum-metin") && n.includes("b.pptx -> b-1.md"));
 });
 
 console.log(`ajan: ${count} test geçti`);

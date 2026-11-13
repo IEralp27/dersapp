@@ -104,6 +104,79 @@ export function resolveCitation(file: string, known: string[]): string | null {
   return known.find((p) => fold(normPath(p)).endsWith(tail)) ?? null;
 }
 
+// ------------------------------------------------------------ Sunumlar (.pptx/.ppt/.odp)
+// Açık sunum önbellekte bir PDF'e çevrilmiştir (veri klasörü `office/…/sunum.pdf`): yapay zeka onu okur,
+// öğrenci özgün adı görür. Açılmamış .pptx'lerin metni veri klasöründe `sunum-metin/<ad>-<özet>.md`.
+
+/** Açık bir sunum: özgün yol/ad + okunabilir PDF'in gerçek yolu. */
+export interface Converted {
+  path: string;
+  name: string;
+  pdf: string;
+}
+
+export const isPresentation = (p: string) => /\.(pptx|ppt|odp)$/i.test(p);
+
+/** İki yol aynı dosya mı (ayırıcı ve Windows'ta harf büyüklüğü farkı gözetmeden). */
+export function samePath(a: string, b: string): boolean {
+  return key(normPath(a)) === key(normPath(b));
+}
+
+/** Sunumun metin sürümünün dosya adı: "<güvenli ad>-<yol özeti>.md" (Rust `valid_slides_name` ile aynı kural). */
+export function slidesFileName(path: string): string {
+  const stem = baseName(path).replace(/\.[^.]*$/, "");
+  const safe = fold(stem).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "").slice(0, 60) || "sunum";
+  const k = key(normPath(path));
+  let h = 0x811c9dc5;
+  for (let i = 0; i < k.length; i++) h = Math.imul(h ^ k.charCodeAt(i), 0x01000193) >>> 0;
+  return `${safe}-${h.toString(16).padStart(8, "0")}.md`;
+}
+
+export interface ListedFile {
+  path: string;
+  name: string;
+  size: number;
+  modified: number;
+  /** Okunacak gerçek dosya (dönüştürülmüş sunumda PDF); yoksa path */
+  read?: string;
+}
+
+/**
+ * Rust'ın listelediği dosyaları arama/atıf için düzenler: gizli klasörlerdeki (sunum metinleri) dosyalar atılır;
+ * dönüştürülmüş sunum PDF'i özgün sunumun adını ve yolunu alır (okuma PDF'ten). Sunumun kendisi (.pptx)
+ * zaten listedeyse PDF tekrar sayılmaz.
+ */
+export function aliasFiles<T extends ListedFile>(files: T[], conv: Converted[], hideDirs: string[]): T[] {
+  const out: T[] = [];
+  for (const f of files) {
+    if (hideDirs.some((d) => d && isUnder(f.path, d))) continue;
+    const c = conv.find((x) => samePath(x.pdf, f.path));
+    if (!c) {
+      out.push(f);
+      continue;
+    }
+    if (/\.pptx$/i.test(c.path) && files.some((g) => samePath(g.path, c.path))) continue;
+    out.push({ ...f, path: c.path, name: c.name, read: f.path });
+  }
+  return out;
+}
+
+/**
+ * Atıfı açılacak yola çevirir: dönüştürülmüş PDF'e (ya da "ad.pdf" diye yazılmış sunuma) giden atıf
+ * özgün sunumu açar.
+ */
+export function resolveDocCitation(file: string, known: string[], conv: Converted[]): string | null {
+  const all = [...known, ...conv.map((c) => c.pdf)];
+  const hit = resolveCitation(file, all);
+  if (hit) return conv.find((c) => samePath(c.pdf, hit))?.path ?? hit;
+  if (!/\.pdf$/i.test(file)) return null;
+  // "Sunum.pdf" -> açık ya da klasördeki "Sunum.pptx"
+  const stem = fold(baseName(file).replace(/\.(pdf|pptx|ppt|odp)$/i, ""));
+  const pres = [...conv.map((c) => c.path), ...known].filter(isPresentation);
+  return pres.find((p) => fold(baseName(p).replace(/\.\w+$/, "")) === stem) ?? null;
+}
+
 // ------------------------------------------------------------ CLI araç olayları -> durum satırı
 
 function clip(s: string, n = 40): string {
@@ -277,17 +350,38 @@ export function searchContext(query: string, hits: SearchHit[]): string {
 // ------------------------------------------------------------ Ajan (Claude Code CLI) talimatı
 
 export interface AgentView {
-  /** Öğrencinin baktığı belge (yoksa null) */
-  doc: { path: string; name: string; page: number; pages: number } | null;
+  /** Öğrencinin baktığı belge (yoksa null); sunumsa `pdf` okunacak dönüştürülmüş PDF */
+  doc: { path: string; name: string; page: number; pages: number; pdf?: string } | null;
   roots: string[];
+  /** Açık sunumlar (özgün ad -> okunabilir PDF) */
+  converted?: Converted[];
+  /** Klasördeki .pptx'lerin metin sürümleri: klasör + hazır olanlar */
+  slides?: { dir: string; files: { name: string; file: string }[] };
+}
+
+/** "X.pptx sunumu şu PDF olarak okunabilir: <yol>; sayfa = slayt" */
+export function presentationLine(name: string, pdf: string): string {
+  return `"${name}" sunumu şu PDF olarak okunabilir: ${pdf}; sayfa = slayt (s.N = N. slayt). `
+    + `Sunumun kendisini (.pptx) Read ile açmaya çalışma; kaynak gösterirken [${name} s.N] yaz.`;
 }
 
 /** CLI sistem talimatına eklenen not: kökler, açık belge/sayfa, araç kullanımı, atıf biçimi. */
 export function agentNote(v: AgentView): string {
   const roots = v.roots.map((r, i) => `- ${r}${i === 0 ? " (çalışma klasörü)" : ""}`).join("\n");
-  const doc = v.doc
-    ? `Öğrenci şu an "${v.doc.name}" belgesinin ${v.doc.page}. sayfasına bakıyor (toplam ${v.doc.pages} sayfa). Tam yolu: ${v.doc.path}`
+  let doc = v.doc
+    ? `Öğrenci şu an "${v.doc.name}" belgesinin ${v.doc.page}. sayfasına bakıyor (toplam ${v.doc.pages} sayfa). `
+      + (v.doc.pdf ? presentationLine(v.doc.name, v.doc.pdf) : `Tam yolu: ${v.doc.path}`)
     : "Öğrenci şu an bir PDF'e bakmıyor.";
+  const others = (v.converted ?? []).filter((c) => !v.doc || !samePath(c.path, v.doc.path));
+  if (others.length) doc += "\n\nAçık diğer sunumlar:\n" + others.map((c) => "- " + presentationLine(c.name, c.pdf)).join("\n");
+  if (v.slides) {
+    const list = v.slides.files.slice(0, 40).map((f) => `- ${f.name} -> ${f.file}`).join("\n");
+    doc += `\n\nKlasördeki PowerPoint sunumlarının (.pptx) metin sürümleri şu klasörde: ${v.slides.dir}. `
+      + "Her sunum için bir .md dosyası var; \"## Slayt N\" bölümleri sunumun N. sayfasıdır ve ilk satırlarda özgün sunumun yolu yazar. "
+      + ".pptx dosyasını Read ile okuma; bu .md'yi oku ya da Grep ile ara, kaynağı [sunum.pptx s.N] diye göster."
+      + (list ? "\nEşleşmeler (sunum -> metin dosyası):\n" + list : "")
+      + "\n.ppt ve .odp sunumları ancak öğrenci açınca okunabilir.";
+  }
   return "\n\n# Dosyalara erişim\n"
     + "Öğrencinin ders dosyalarını kendin okuyabilirsin (yalnızca okuma). Erişebildiğin klasörler:\n"
     + roots + "\n\n" + doc + "\n\n"

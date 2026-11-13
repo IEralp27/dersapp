@@ -90,8 +90,8 @@ async function run(job: Job, view: PdfView): Promise<void> {
     if (ctrl.signal.aborted) throw new DOMException("İptal", "AbortError");
     setJob(null);
     closeDialog();
-    const title = `Ders notu: ${job.name.replace(/\.pdf$/i, "")}`;
-    await saveAndOpen(`${fileSafe(job.name.replace(/\.pdf$/i, ""))} - ders notu ${pagesText(job.pages).replace("s. ", "s")}`, bytes, title);
+    const title = `Ders notu: ${job.name.replace(/\.(pdf|pptx|ppt|odp)$/i, "")}`;
+    await saveAndOpen(`${fileSafe(job.name.replace(/\.(pdf|pptx|ppt|odp)$/i, ""))} - ders notu ${pagesText(job.pages).replace("s. ", "s")}`, bytes, title);
   } catch (e) {
     setJob(null);
     if ((e as Error)?.name === "AbortError") {
@@ -130,7 +130,7 @@ function failView(job: Job, view: PdfView, message: string): void {
 async function notesToPdf(parts: NotesPart[], name: string, pages: number[]): Promise<Uint8Array> {
   const { blocksToPdf, md, wrapLoose, keep, dateText } = await import("./pdf-export");
   const blocks: Block[] = [];
-  const doc = name.replace(/\.pdf$/i, "");
+  const doc = name.replace(/\.(pdf|pptx|ppt|odp)$/i, "");
   const qa = parts.flatMap((p) => p.qa.map((x) => ({ ...x, pages: p.pages })));
 
   // Kapak

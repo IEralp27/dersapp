@@ -6,9 +6,10 @@ import { invoke } from "@tauri-apps/api/core";
 import * as pdfjs from "pdfjs-dist";
 import { inTauri } from "../backend";
 import {
-  CITE_RE, agentNote, citeLabel, computeRoots, resolveCitation, searchContext, searchDocs, shortRoot, toolStatus,
+  CITE_RE, agentNote, aliasFiles, citeLabel, computeRoots, dirOf, isUnder, resolveDocCitation, searchContext, searchDocs,
+  shortRoot, slidesFileName, toolStatus,
 } from "./ajan";
-import type { IndexedDoc, SearchHit } from "./ajan";
+import type { Converted, IndexedDoc, ListedFile, SearchHit } from "./ajan";
 import type { CliAgent } from "./cli-run";
 import type { PdfView } from "../viewer";
 
@@ -17,7 +18,9 @@ export interface AjanHost {
   folder(): string | null;
   /** Açık PDF sekmelerinin yolları */
   docs(): string[];
-  current(): { path: string; name: string; view: PdfView } | null;
+  /** Açık sunumlar: özgün yol/ad + önbellekteki PDF (yapay zeka bunu okur) */
+  converted(): Converted[];
+  current(): { path: string; name: string; view: PdfView; pdf?: string } | null;
   /** Dosyayı açar (açıksa öne getirir) ve sayfaya gider */
   openAt(path: string, page: number): void;
   /** Etkin sağlayıcı Claude Code CLI mi */
@@ -32,12 +35,7 @@ export interface AjanHost {
   toast(text: string, kind?: "error" | "info"): void;
 }
 
-interface FileEntry {
-  path: string;
-  name: string;
-  size: number;
-  modified: number;
-}
+type FileEntry = ListedFile;
 
 const PREF_KEY = "dersapp.ai.ajan";
 /** Ajan kipinde CLI'nın araç turu sınırı */
@@ -48,6 +46,10 @@ const MAX_PAGES = 1500;
 let host: AjanHost;
 let pref: "on" | "off" | null = null;
 let appDir: string | null = null;
+/** Sunumların metin sürümleri (`sunum-metin/`, ajan.rs) */
+let slidesDir: string | null = null;
+/** .pptx yolu -> metin sürümünün dosya adı (yazılmış olanlar) */
+const slideFiles = new Map<string, string>();
 let roots: string[] = [];
 let rejected: string[] = [];
 let rootsKey = "";
@@ -69,8 +71,9 @@ export function initAjan(h: AjanHost, panel: HTMLElement): void {
   const p = localStorage.getItem(PREF_KEY);
   pref = p === "on" || p === "off" ? p : null;
   if (inTauri) {
-    invoke<string>("ajan_app_dir").then((d) => {
+    Promise.all([invoke<string>("ajan_app_dir"), invoke<string>("ajan_slides_dir").catch(() => null)]).then(([d, s]) => {
       appDir = d;
+      slidesDir = s;
       void refreshRoots();
     }).catch((e) => console.error("Uygulama klasörü alınamadı", e));
   }
@@ -81,7 +84,7 @@ export function initAjan(h: AjanHost, panel: HTMLElement): void {
 export function bindCitations(box: HTMLElement): void {
   const open = (t: HTMLElement) => {
     const known = [...host.docs(), ...files.map((f) => f.path)];
-    const path = resolveCitation(t.dataset.file ?? "", known);
+    const path = resolveDocCitation(t.dataset.file ?? "", known, host.converted());
     if (!path) return host.toast(`"${t.dataset.file}" erişilen klasörlerde bulunamadı.`, "info");
     host.openAt(path, Number(t.dataset.page) || 1);
   };
@@ -113,7 +116,10 @@ export const ajanReady = () => active() && host.isCli();
 /** Kökleri yeniden hesaplar; değiştiyse Rust'ta doğrular ve dosya listesini tazeler. */
 async function refreshRoots(): Promise<void> {
   if (!inTauri || !host) return;
-  const raw = computeRoots({ folder: host.folder(), docs: host.docs(), extra: appDir ? [appDir] : [] });
+  // Açık sunumların PDF'leri (yalnızca o sunumun önbellek klasörü) ve sunum metinleri de okunabilir
+  const conv = host.converted();
+  const extra = [appDir, slidesDir, ...conv.map((c) => dirOf(c.pdf))].filter((x): x is string => !!x);
+  const raw = computeRoots({ folder: host.folder(), docs: host.docs(), extra });
   const k = JSON.stringify(raw);
   if (k === rootsKey) return;
   rootsKey = k;
@@ -122,15 +128,20 @@ async function refreshRoots(): Promise<void> {
     if (rootsKey !== k) return;
     roots = r.ok;
     rejected = r.rejected;
-    files = roots.length ? await invoke<FileEntry[]>("ajan_files", { roots }) : [];
+    const listed = roots.length ? await invoke<FileEntry[]>("ajan_files", { roots }) : [];
+    files = aliasFiles(listed, conv, slidesDir ? [slidesDir] : []);
   } catch (e) {
     console.error("Erişim klasörleri doğrulanamadı", e);
     roots = [];
     files = [];
   }
   host.render();
-  if (active() && !host.isCli()) void ensureIndex(); // API sağlayıcılarında arama için arka planda hazırla
+  // API sağlayıcılarında arama için arka planda hazırla; CLI'da yalnızca .pptx'lerin metin sürümleri
+  if (active()) void ensureIndex(host.isCli() ? (f) => /\.pptx$/i.test(f.name) : undefined);
 }
+
+/** Göndermeden önce kökleri tazeler (ör. yeni açılan sunumun PDF klasörü). */
+export const ajanSync = (): Promise<void> => refreshRoots().catch(() => undefined);
 
 // ------------------------------------------------------------ Claude Code CLI (ajan kipi)
 
@@ -159,9 +170,15 @@ export function agentOptions(wrap: HTMLElement): CliAgent | undefined {
 export function agentSystem(system: string): string {
   if (!active() || !host.isCli()) return system;
   const cur = host.current();
+  const pptx = files.filter((f) => /\.pptx$/i.test(f.name) && !f.read);
   return system + agentNote({
     roots,
-    doc: cur ? { path: cur.path, name: cur.name, page: cur.view.page, pages: cur.view.pageCount } : null,
+    doc: cur ? { path: cur.path, name: cur.name, page: cur.view.page, pages: cur.view.pageCount, pdf: cur.pdf } : null,
+    converted: host.converted(),
+    slides: slidesDir && pptx.length ? {
+      dir: slidesDir,
+      files: pptx.flatMap((f) => (slideFiles.has(f.path) ? [{ name: f.name, file: slideFiles.get(f.path)! }] : [])),
+    } : undefined,
   });
 }
 
@@ -223,6 +240,21 @@ async function pdfPages(bytes: Uint8Array): Promise<string[]> {
   }
 }
 
+/** .pptx: slayt metinleri (gizli slaytlar atlanır; N = PDF'in N. sayfası). Çizim yok. */
+async function pptxPages(bytes: Uint8Array): Promise<string[]> {
+  const { pptxSlideTexts } = await import("../pptx/text");
+  return pptxSlideTexts(bytes);
+}
+
+/** .pptx'in metin sürümünü `sunum-metin/`e yazar (CLI ajanı okur); içerik aynıysa Rust dokunmaz. */
+async function writeSlides(f: FileEntry, pages: string[]): Promise<void> {
+  if (!slidesDir) return;
+  const { slidesMarkdown } = await import("../pptx/text");
+  const name = slidesFileName(f.path);
+  await invoke("ajan_slides_put", { name, md: slidesMarkdown(f.name, f.path, pages) });
+  slideFiles.set(f.path, name);
+}
+
 async function readBytes(path: string): Promise<Uint8Array> {
   const buf = await invoke<ArrayBuffer>("ajan_read", { roots, path });
   return new Uint8Array(buf);
@@ -232,9 +264,11 @@ async function readBytes(path: string): Promise<Uint8Array> {
 async function docText(f: FileEntry): Promise<IndexedDoc> {
   const mem = index.get(f.path);
   if (mem && mem.modified === f.modified) return mem.doc;
+  const src = f.read ?? f.path; // dönüştürülmüş sunumda PDF
+  const pptx = !f.read && /\.pptx$/i.test(f.name);
   let pages: string[] | null = null;
   try {
-    const raw = await invoke<string>("ajan_cache_get", { path: f.path });
+    const raw = await invoke<string>("ajan_cache_get", { path: src });
     if (raw) {
       const c = JSON.parse(raw) as { modified: number; size: number; pages: string[] };
       if (c.modified === f.modified && c.size === f.size && Array.isArray(c.pages)) pages = c.pages;
@@ -243,20 +277,22 @@ async function docText(f: FileEntry): Promise<IndexedDoc> {
     // önbellek bozuk: yeniden çıkar
   }
   if (!pages) {
-    const bytes = await readBytes(f.path);
-    pages = /\.pdf$/i.test(f.name) ? await pdfPages(bytes) : [new TextDecoder().decode(bytes)];
+    const bytes = await readBytes(src);
+    pages = pptx ? await pptxPages(bytes)
+      : /\.pdf$/i.test(src) ? await pdfPages(bytes) : [new TextDecoder().decode(bytes)];
     const json = JSON.stringify({ modified: f.modified, size: f.size, pages });
-    invoke("ajan_cache_put", { path: f.path, json }).catch((e) => console.error("Metin önbelleği yazılamadı", e));
+    invoke("ajan_cache_put", { path: src, json }).catch((e) => console.error("Metin önbelleği yazılamadı", e));
   }
+  if (pptx) await writeSlides(f, pages).catch((e) => console.error("Sunum metni yazılamadı", e));
   const doc = { path: f.path, name: f.name, pages };
   index.set(f.path, { modified: f.modified, doc });
   return doc;
 }
 
-/** Tüm dosyaları sırayla dizinler (arka planda, bir kez); "Klasörde ara" bunu bekler. */
-function ensureIndex(): Promise<void> {
+/** Tüm dosyaları (ya da yalnızca seçilenleri) sırayla dizinler (arka planda, bir kez); "Klasörde ara" bunu bekler. */
+function ensureIndex(only?: (f: FileEntry) => boolean): Promise<void> {
   if (indexing) return indexing;
-  const list = [...files];
+  const list = only ? files.filter(only) : [...files];
   indexing = (async () => {
     for (let i = 0; i < list.length; i++) {
       progress = `${i + 1}/${list.length}`;
@@ -346,7 +382,10 @@ export function ajanRow(busy: boolean): HTMLElement {
   if (!on) line.textContent = "Yapay zeka yalnızca gönderilen sayfayı görür.";
   else if (!roots.length) line.textContent = "Erişilecek klasör yok: Dosyalar panelinden (Ctrl+B) \"Klasör seç\".";
   else {
-    const names = roots.map((r) => (appDir && r === appDir ? "uygulama çıktıları" : shortRoot(r)));
+    const conv = host.converted();
+    const names = roots.map((r) => (appDir && r === appDir ? "uygulama çıktıları"
+      : slidesDir && r === slidesDir ? "sunum metinleri"
+        : conv.some((c) => isUnder(c.pdf, r)) ? "sunum (PDF)" : shortRoot(r)));
     line.textContent = "Erişim: " + names.join(", ") + (host.isCli() ? "" : " · bu sağlayıcıda yalnızca \"Klasörde ara\"");
     line.title = roots.join("\n") + (rejected.length ? "\n\nAlınmayan: " + rejected.join(", ") : "");
   }
