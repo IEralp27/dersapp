@@ -67,6 +67,8 @@ interface Turn {
   role: "user" | "assistant";
   /** Modele giden metin */
   text: string;
+  /** Konuşmada görünen etiket (kullanıcı turu; yapay zeka sekmesi kaydeder) */
+  label?: string;
   images?: ChatImage[];
   el: HTMLElement;
   body?: HTMLElement;
@@ -74,7 +76,7 @@ interface Turn {
   dropped?: boolean;
 }
 
-interface Conv {
+export interface Conv {
   path: string;
   name: string;
   turns: Turn[];
@@ -251,14 +253,36 @@ function assistantTurnEl(): { wrap: HTMLElement; body: HTMLElement } {
   return { wrap, body };
 }
 
-function nearBottom(): boolean {
-  const s = mainEl;
+function nearBottom(s = mainEl): boolean {
   return s.scrollHeight - s.scrollTop - s.clientHeight < 60;
 }
 
-function scrollDown(): void {
-  mainEl.scrollTop = mainEl.scrollHeight;
+function scrollDown(s = mainEl): void {
+  s.scrollTop = s.scrollHeight;
 }
+
+/**
+ * Konuşmanın gösterildiği yer: yan panel (PDF'e bağlı; ders modu, işaretler) ya da yapay zeka sekmesi (ai-tab.ts).
+ * ask() çizim, akış ve gönderme için yalnızca bunu kullanır.
+ */
+export interface ChatSurface {
+  /** Kaydırılan konuşma alanı */
+  main(): HTMLElement;
+  /** Bu konuşma şu an ekranda mı */
+  shows(c: Conv): boolean;
+  render(): void;
+  /** Sistem talimatı (ajan notu ask() içinde eklenir) */
+  system(): string;
+  /** PDF paneli: ders modu ve sayfa işaretleri */
+  pdf: boolean;
+  /** Yanıt bittiğinde (kaydetmek için) */
+  done?(c: Conv): void;
+}
+
+const panelSurface: ChatSurface = {
+  main: () => mainEl, shows: (c) => shown === c, render: () => render(),
+  system: () => systemWithProfile(systemWithMarks(SYSTEM_PROMPT)), pdf: true,
+};
 
 interface AskInput {
   /** Modele giden metin */
@@ -268,21 +292,23 @@ interface AskInput {
   att: Attachment | null;
 }
 
-async function ask(c: Conv, q: AskInput): Promise<void> {
+async function ask(c: Conv, q: AskInput, s: ChatSurface = panelSurface): Promise<void> {
   if (c.busy) return;
   const why = missing(settings);
   if (why) {
     host.toast("Önce yapay zeka ayarlarını tamamla: " + why);
-    settingsOpen = false;
-    render();
+    if (s.pdf) {
+      settingsOpen = false;
+      render();
+    } else openSettings();
     return;
   }
   const presetId = settings.preset;
   const config = currentConfig(settings);
-  lessonInterrupt(q.label.split(" · ")[0]); // ders sürüyorsa duraklar (lesson-ui.ts)
+  if (s.pdf) lessonInterrupt(q.label.split(" · ")[0]); // ders sürüyorsa duraklar (lesson-ui.ts)
 
   const user: Turn = {
-    role: "user", text: q.text,
+    role: "user", text: q.text, label: q.label,
     images: q.att ? [q.att.image] : undefined,
     el: userTurnEl(q.label, q.att),
   };
@@ -292,25 +318,25 @@ async function ask(c: Conv, q: AskInput): Promise<void> {
   const messages = history(c);
   c.turns.push(bot);
   c.thread.append(user.el, bot.el);
-  if (q.att) setRegion(c.path, q.att.region ?? null); // işaretler bu görüntüye göre
+  if (q.att && s.pdf) setRegion(c.path, q.att.region ?? null); // işaretler bu görüntüye göre
   if (c.pending === q.att) c.pending = null;
   const ctrl = new AbortController();
   c.busy = ctrl;
-  render();
-  scrollDown();
+  s.render();
+  if (s.shows(c)) scrollDown(s.main());
 
   let frame = 0;
   const paint = (final: boolean) => {
     frame = 0;
-    const stick = shown === c && nearBottom();
+    const stick = s.shows(c) && nearBottom(s.main());
     body.innerHTML = renderMarkdown(visibleText(bot.text, !final), !final);
     linkCitations(body); // [dosya.pdf s.12] -> tıklanır (ajan-ui.ts)
-    if (stick) scrollDown();
+    if (stick) scrollDown(s.main());
   };
 
   try {
     await streamChat({
-      presetId, config, system: agentSystem(systemWithProfile(systemWithMarks(SYSTEM_PROMPT))), messages, signal: ctrl.signal,
+      presetId, config, system: agentSystem(s.system()), messages, signal: ctrl.signal,
       agent: agentOptions(wrap), // Dosyalara eriş (yalnızca Claude Code CLI)
       onText: (d) => {
         bot.text += d;
@@ -320,10 +346,10 @@ async function ask(c: Conv, q: AskInput): Promise<void> {
     cancelAnimationFrame(frame);
     if (!bot.text) {
       bot.dropped = user.dropped = true;
-      showError(c, user, bot, q, new AiError("Model boş yanıt döndürdü. Başka bir model deneyebilirsin."));
+      showError(c, user, bot, q, new AiError("Model boş yanıt döndürdü. Başka bir model deneyebilirsin."), s);
     } else {
       paint(true);
-      attachMarks(c.path, wrap, body, bot.text);
+      if (s.pdf) attachMarks(c.path, wrap, body, bot.text);
     }
   } catch (e) {
     cancelAnimationFrame(frame);
@@ -338,23 +364,24 @@ async function ask(c: Conv, q: AskInput): Promise<void> {
     } else {
       bot.dropped = user.dropped = true;
       if (bot.text) paint(true);
-      showError(c, user, bot, q, e);
+      showError(c, user, bot, q, e, s);
     }
   } finally {
     if (c.busy === ctrl) c.busy = null;
     if (!bot.dropped) addAnswerTools(bot);
-    render();
+    s.done?.(c);
+    s.render();
   }
 }
 
-function addAnswerTools(bot: Turn): void {
+function addAnswerTools(bot: Turn, auto = true): void {
   const bar = el("div", "ai-answer-tools");
   bar.append(iconBtn("Yanıtı kopyala (Markdown)", ICONS.copy, () => void copyText(visibleText(bot.text, false), "Yanıt panoya kopyalandı.")));
-  ttsAttach(bar, bot); // sesli okuma düğmeleri (tts.ts)
+  ttsAttach(bar, bot, auto); // sesli okuma düğmeleri (tts.ts)
   bot.el.append(bar);
 }
 
-function showError(c: Conv, user: Turn, bot: Turn, q: AskInput, e: unknown): void {
+function showError(c: Conv, user: Turn, bot: Turn, q: AskInput, e: unknown, s: ChatSurface = panelSurface): void {
   const box = el("div", "ai-error");
   const text = e instanceof AiError ? e.message : "Beklenmeyen hata: " + errText(e);
   for (const line of text.split("\n\n")) box.append(el("p", "", line));
@@ -364,14 +391,75 @@ function showError(c: Conv, user: Turn, bot: Turn, q: AskInput, e: unknown): voi
       user.el.remove();
       bot.el.remove();
       c.turns = c.turns.filter((t) => t !== user && t !== bot);
-      void ask(c, q);
+      void ask(c, q, s);
     }),
     textBtn("Ayarlar", "ai-btn ghost", () => openSettings()),
   );
   box.append(row);
   if (!bot.text) bot.body!.replaceChildren();
   bot.el.append(box);
-  if (shown === c) scrollDown();
+  if (s.shows(c)) scrollDown(s.main());
+}
+
+// ------------------------------------------------------------ Yapay zeka sekmesi için (ai-tab.ts)
+
+/** Panelin haritasına girmeyen bağımsız konuşma (yapay zeka sekmesi). */
+export function chatConv(path: string, name: string): Conv {
+  return { path, name, turns: [], pending: null, thread: el("div", "ai-thread"), busy: null };
+}
+
+/** Soru gönderir: panelle aynı akış, çizim ve hata/yeniden dene. */
+export function chatAsk(c: Conv, text: string, label: string, s: ChatSurface): Promise<void> {
+  return ask(c, { text, label, att: null }, s);
+}
+
+/** Kayıtlı turları konuşmaya geri yükler (sesli okuma kendiliğinden başlamaz). */
+export function chatRestore(c: Conv, saved: { role: "user" | "assistant"; text: string; label?: string }[]): void {
+  for (const t of saved) {
+    if (t.role === "user") {
+      const turn: Turn = { role: "user", text: t.text, label: t.label, el: userTurnEl(t.label || t.text, null) };
+      c.turns.push(turn);
+      c.thread.append(turn.el);
+    } else {
+      const { wrap, body } = assistantTurnEl();
+      const bot: Turn = { role: "assistant", text: t.text, el: wrap, body };
+      body.innerHTML = renderMarkdown(visibleText(t.text, false), false);
+      linkCitations(body);
+      addAnswerTools(bot, false);
+      c.turns.push(bot);
+      c.thread.append(wrap);
+    }
+  }
+}
+
+/** Kaydedilecek turlar (hatalı/boş olanlar hariç) */
+export function chatTurns(c: Conv): { role: "user" | "assistant"; text: string; label?: string }[] {
+  return c.turns.filter((t) => !t.dropped && t.text).map((t) => ({ role: t.role, text: t.text, label: t.label }));
+}
+
+/** Başlıktaki "sağlayıcı · model" yazısı; ayar eksikse null */
+export function chatModel(): string | null {
+  if (missing(settings)) return null;
+  return `${presetOf(settings.preset).label.replace(/ \(.*\)$/, "")} · ${currentConfig(settings).model || "varsayılan model"}`;
+}
+
+export const chatSettingsMissing = () => missing(settings);
+export const chatIsCli = () => currentConfig(settings).protocol === "cli";
+export const openAiSettings = () => openSettings();
+
+/**
+ * "Dosyalara eriş" satırının (ajan-ui.ts) soru kutusu ve gönderimi: yapay zeka sekmesi etkinken ona gider.
+ * null: yan panel.
+ */
+export interface ChatTarget {
+  query(take: boolean): string;
+  send(text: string, label: string): void;
+  notice(card: HTMLElement): void;
+  render(): void;
+}
+let target: ChatTarget | null = null;
+export function setChatTarget(t: ChatTarget | null): void {
+  target = t;
 }
 
 // ------------------------------------------------------------ Eylemler
@@ -975,6 +1063,7 @@ function settingsView(): HTMLElement {
     if (!saveSettings(settings)) host.toast("Ayarlar kalıcı olarak kaydedilemedi; yalnızca bu oturumda geçerli.");
     settingsOpen = false;
     render();
+    target?.render(); // yapay zeka sekmesinin model yazısı
   });
   save.type = "submit";
   const cancel = textBtn("Vazgeç", "ai-btn ghost", () => {
@@ -1134,19 +1223,26 @@ export function initAi(h: AiHost): void {
     folder: () => host.folder?.() ?? null, docs: () => host.docs?.() ?? [], current: () => host.current(),
     openAt: (path, page) => host.openAt?.(path, page), isCli: () => currentConfig(settings).protocol === "cli",
     query: (take) => {
+      if (target) return target.query(take);
       const q = input.value;
       if (take) (input.value = "", autosize());
       return q;
     },
     send: (text, label) => {
+      if (target) return target.send(text, label);
       const c = activeConv();
       if (c) void ask(c, { text, label, att: null });
     },
     notice: (card) => {
+      if (target) return target.notice(card);
       const c = activeConv();
       if (c) appendNotice(c.path, c.name, card);
     },
-    render, toast: (t, k) => host.toast(t, k),
+    render: () => {
+      render();
+      target?.render();
+    },
+    toast: (t, k) => host.toast(t, k),
   }, panel);
   // Sekme değişince (etkin sekme sınıfı değişir) panel o sekmenin konuşmasını göstersin
   new MutationObserver(() => render()).observe(document.getElementById("tabs")!, {

@@ -74,18 +74,22 @@ export function initAjan(h: AjanHost, panel: HTMLElement): void {
       void refreshRoots();
     }).catch((e) => console.error("Uygulama klasörü alınamadı", e));
   }
-  // Atıfa tıkla: dosyayı o sayfada aç
+  bindCitations(panel);
+}
+
+/** Kaptaki atıflara tıklanınca (ya da Enter) dosyayı o sayfada açar. Panel ve yapay zeka sekmesi kullanır. */
+export function bindCitations(box: HTMLElement): void {
   const open = (t: HTMLElement) => {
     const known = [...host.docs(), ...files.map((f) => f.path)];
     const path = resolveCitation(t.dataset.file ?? "", known);
     if (!path) return host.toast(`"${t.dataset.file}" erişilen klasörlerde bulunamadı.`, "info");
     host.openAt(path, Number(t.dataset.page) || 1);
   };
-  panel.addEventListener("click", (e) => {
+  box.addEventListener("click", (e) => {
     const t = (e.target as HTMLElement).closest<HTMLElement>(".ai-cite");
     if (t) open(t);
   });
-  panel.addEventListener("keydown", (e) => {
+  box.addEventListener("keydown", (e) => {
     const t = (e.target as HTMLElement).closest?.<HTMLElement>(".ai-cite");
     if (t && (e.key === "Enter" || e.key === " ")) {
       e.preventDefault();
@@ -102,6 +106,9 @@ export function ajanEnabled(): boolean {
 function active(): boolean {
   return inTauri && ajanEnabled() && roots.length > 0;
 }
+
+/** Claude Code CLI dosyaları kendisi okuyabilir mi (erişim açık, kök var, sağlayıcı CLI) */
+export const ajanReady = () => active() && host.isCli();
 
 /** Kökleri yeniden hesaplar; değiştiyse Rust'ta doğrular ve dosya listesini tazeler. */
 async function refreshRoots(): Promise<void> {

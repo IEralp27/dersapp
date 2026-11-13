@@ -7,7 +7,7 @@ Ders çalışmaya odaklı masaüstü PDF okuyucu: "sohbet penceresi değil, PDF'
 - **Yığın:** Tauri 2 (Rust çekirdek) + Vite + sade TypeScript (framework yok). Arayüz web katmanında kalacak; kullanıcı Rust'ı seviyor ama saf Rust arayüze geçilmeyecek (karar verildi).
 - **Klasör:** `C:\Users\Eralp\Desktop\dev_app_learn\dersapp`
 - **Çalıştırma:** `npm install` → `npm run tauri dev`
-- **Testler:** `node src/<dosya>.test.ts` (Node 22, TS'i doğrudan çalıştırır). Hepsi geçiyordu: calc-engine, ai/quiz, quiz-store, ajan, srs, daily-plan, check, marks, tts-text, tts-audio, tts-engine, tts-settings, lesson, notes, learner, cli-stream, web/web, recording, nblm. `npm run build` temiz.
+- **Testler:** `node src/<dosya>.test.ts` (Node 22, TS'i doğrudan çalıştırır). Hepsi geçiyordu: calc-engine, ai/quiz, quiz-store, ajan, srs, daily-plan, check, marks, sohbet, tts-text, tts-audio, tts-engine, tts-settings, lesson, notes, learner, cli-stream, web/web, recording, nblm. `npm run build` temiz.
 - Ayrıntılı dosya haritası ve kısayollar: `README.md`. MCP kurulumu: `docs/MCP.md`.
 
 ## Var olan özellikler
@@ -42,6 +42,12 @@ Kullanıcı hata çıktısı atarsa önce onu düzelt.
 - Diğer sağlayıcılar: "Klasörde ara" (kutudaki metni arar). Metin PDF.js ile çıkarılır, önbellek `ajan-metin/<FNV>.json` (yol + mtime + boyut). Sıralama BM25 benzeri (`searchDocs`), bağlam `searchContext`.
 - Atıflar `[dosya.pdf s.12]` → `linkCitations` tıklanır yapar → `openAt` (main.ts).
 - İlk denemede bak: Windows'ta `\\?\` önekli yollar (`plain`), CLI PDF'i Read `pages` ile okuyor mu, durum satırları, Durdur, büyük klasörde dizinleme süresi.
+
+## Yapay zeka sekmesi (13 Kasım, `claude/ai-sekmesi` dalı, gerçek cihazda denenmedi)
+- Üst çubukta yıldız düğmesi / karşılamada "Yapay zeka" / Ctrl+Shift+J: tam sekme sohbet (`src/ai/ai-tab.ts`). Sayfaya bağlı değil; "PDF ekle" açık PDF'leri soruya ekler (API: açık sayfanın metni, CLI ajanı: yol). Dosyalara eriş satırı, atıflar, Durdur ve sesli okuma sekmede de var.
+- Ortak makine: panel.ts `ChatSurface` + `chatAsk`/`chatRestore`/`chatTurns` (panel davranışı aynı); sesli okuma çubuğu `ttsDock` ile etkin sekmeye taşınır; ajan satırı `setChatTarget` ile sekmeye yazar; `bindCitations` (ajan-ui).
+- Kayıt: localStorage `dersapp.ai.sohbet.v1` (`sohbet.ts`, test var), sekme `ai:<kimlik>` olarak `saved.tabs`'ta; sekme kapanınca konuşma silinir. Rust değişmedi.
+- Başsız Chrome + sahte OpenAI sunucusuyla denendi (aç, gönder, LaTeX, atıf → PDF s.3, Durdur, geri yükleme, kapatınca silme). Bakılacak: gerçek CLI ajanıyla durum satırları, ayarlar yan panelde açılıyor (sekmede değil).
 
 ## Web sekmesi + NotebookLM (12 Kasım, `claude/web-sekmesi` dalı, gerçek cihazda denenmedi)
 - Gömülü çocuk webview (Tauri `unstable` özelliği, `Window::add_child`), `src-tauri/src/web.rs` + `src/web/`. Ayrı pencere yerine seçildi: sekme gibi davranır; konum `#web-area`'ya göre JS'ten verilir, başka sekmede gizlenir.

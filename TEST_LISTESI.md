@@ -67,3 +67,11 @@ Her satırı dene, olursa işaretle. Olmazsa hata metnini/ekran görüntüsünü
 - [ ] "Yapay zekayla ayrıntılandır": kısa, bugüne özel bir liste yazar; uydurma dosya adı yok.
 - [ ] Tahtada bir soruyu kalemle bilerek yanlış çöz, panelde "Çözümümü kontrol et": ilk hatalı satır kutulanır, tam çözüm verilmez, "Hata defterine ekle" kart oluşturur.
 - [ ] Aynısını PDF sayfasında bölge seçerek (C) dene: düğme seçilen bölgenin kartında da var.
+
+## Yapay zeka sekmesi
+- [ ] Yıldız düğmesi ya da Ctrl+Shift+J: yeni sekme açılır, sohbet tüm alanı kaplar; Ctrl+J yan paneli hâlâ açar.
+- [ ] Soru gönder: yanıt akar, formüller çizilir, Durdur çalışır, sekme adı ilk sorudan gelir.
+- [ ] "PDF ekle" ile açık bir PDF'i ekle: yanıt o sayfaya göre; [dosya.pdf s.N] etiketine tıklayınca PDF o sayfada açılır.
+- [ ] Claude Code CLI + Dosyalara eriş açık: durum satırları görünür, klasördeki dosyaları okur.
+- [ ] Sesli okuma (yanıttaki düğme, Alt+S) sekmede çalışır; oynatıcı çubuğu sekmenin altında.
+- [ ] İki sekme ayrı konuşma; uygulamayı kapat-aç: sekmeler ve konuşmalar geri gelir; sekmeyi kapatınca konuşma silinir.

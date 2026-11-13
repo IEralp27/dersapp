@@ -1063,20 +1063,50 @@ function onKey(e: KeyboardEvent): void {
 
 // ================================================================ Bağlama
 
+let watcher: MutationObserver;
+let baseDock: Dock | null = null;
+type Dock = Pick<Host, "panel" | "main" | "compose">;
+const watched = new WeakSet<HTMLElement>();
+
+function watch(panel: HTMLElement): void {
+  if (watched.has(panel)) return;
+  watched.add(panel);
+  watcher.observe(panel, { subtree: true, childList: true, attributes: true, attributeFilter: ["hidden"] });
+}
+
 /** Panel kurulunca bir kez çağrılır. */
 export function initTts(h: Host, custom?: Speaker): void {
   if (custom) system = custom;
   speaker = sys();
   host = h;
+  baseDock = { panel: h.panel, main: h.main, compose: h.compose };
   h.panel.insertBefore(buildBar(), h.compose);
   sys().onVoicesChanged(() => sync());
   window.addEventListener("keydown", onKey, true);
   // Okunan yanıt silinince, sekme/konuşma değişince ya da panel kapanınca dur
-  new MutationObserver(() => {
-    if (state === "idle" || !turn) return;
-    if (h.panel.hidden || (!turn.sample && (!turn.el.isConnected || !h.main.contains(turn.el)))) stop();
-  }).observe(h.panel, { subtree: true, childList: true, attributes: true, attributeFilter: ["hidden"] });
+  watcher = new MutationObserver(() => {
+    if (state === "idle" || !turn || !host) return;
+    if (host.panel.hidden || (!turn.sample && (!turn.el.isConnected || !host.main.contains(turn.el)))) stop();
+  });
+  watch(h.panel);
   window.addEventListener("pagehide", () => stop());
+}
+
+/**
+ * Oynatıcı çubuğunu, ayar kutusunu ve Alt+S'yi başka bir sohbet alanına taşır (yapay zeka sekmesi, ai-tab.ts).
+ * null: yan panele geri döner. Okuma sürüyorsa durur.
+ */
+export function ttsDock(d: Dock | null): void {
+  const next = d ?? baseDock;
+  if (!host || !next || host.panel === next.panel) return;
+  stop();
+  closePop();
+  closeChooser();
+  host.panel = next.panel;
+  host.main = next.main;
+  host.compose = next.compose;
+  next.panel.insertBefore(bar, next.compose);
+  watch(next.panel);
 }
 
 /** Hiçbir motor kullanılamıyorsa (ör. sistem sesi yok, bulut ayarı yok) denetimler eklenmez; eskisi gibi. */

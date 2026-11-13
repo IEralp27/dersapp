@@ -2,8 +2,8 @@
 
 .ls-chip { display: inline-flex; align-items: center; gap: 5px; }
 .ls-chip.on { border-color: var(--accent); color: var(--fg); }
-#ai-panel .ls-chip svg, #ai-panel .ls-btn svg { width: 15px; height: 15px; flex: none; }
-#ai-panel .ls-icon svg { width: 16px; height: 16px; }
+:is(#ai-panel, .ai-tab) .ls-chip svg, #ai-panel .ls-btn svg { width: 15px; height: 15px; flex: none; }
+:is(#ai-panel, .ai-tab) .ls-icon svg { width: 16px; height: 16px; }
 
 .ls-btn {
   display: inline-flex;
@@ -125,7 +125,7 @@
   letter-spacing: 0.02em;
   text-transform: uppercase;
 }
-#ai-panel .ls-tag svg { width: 13px; height: 13px; }
+:is(#ai-panel, .ai-tab) .ls-tag svg { width: 13px; height: 13px; }
 .ls-turn { border-left: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); padding-left: 10px; }
 .ls-turn.ls-blank { opacity: 0.75; }
 .ls-turn.ls-blank .ai-md { font-style: italic; }

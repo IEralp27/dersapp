@@ -1,6 +1,8 @@
 // Uygulama kabuğu: sekmeler, dosyalar paneli, araç çubuğu, kısayollar.
 import * as backend from "./backend";
 import { initAi, toggleAi } from "./ai/panel";
+import { AiTab, initAiTabs, newAiTabId, pruneAiTabs, savedAiTitle } from "./ai/ai-tab";
+import { validId } from "./ai/sohbet";
 import type { Entry, Listing, PdfSource } from "./backend";
 import type { Tool } from "./draw";
 import { BOARD_TAB, PdfError, PdfView } from "./viewer";
@@ -31,6 +33,8 @@ interface Tab {
   btn: HTMLElement;
   /** Web sekmesi (yerel webview; src/web/) */
   web?: WebState;
+  /** Yapay zeka sekmesi (ai/ai-tab.ts); yolu "ai:<kimlik>" */
+  ai?: AiTab;
 }
 
 interface WebState {
@@ -168,7 +172,7 @@ function makeTab(src: PdfSource): Tab {
 
 /** Sekmenin PDF'ini (henüz yüklenmediyse) yükler. Sekmeler ilk tıklandığında yüklenir. */
 function load(tab: Tab): Promise<void> {
-  if (tab.web) return Promise.resolve();
+  if (tab.web || tab.ai) return Promise.resolve();
   if (tab.view || tab.loading) return tab.loading ?? Promise.resolve();
   tab.failed = false;
   tab.btn.classList.add("loading");
@@ -234,14 +238,16 @@ function showView(tab: Tab): void {
 }
 
 function activate(tab: Tab): void {
-  if (active === tab && (tab.view || tab.web)) return;
+  if (active === tab && (tab.view || tab.web || tab.ai)) return;
   if (active?.view) {
     saved.pos[active.path] = active.view.getPos();
     active.view.el.hidden = true;
   }
   if (active?.web) hideWeb(active);
+  active?.ai?.hide();
   active = tab;
   if (tab.web) showWeb(tab);
+  else if (tab.ai) tab.ai.show();
   else if (tab.view) showView(tab);
   else void load(tab);
   renderTabs();
@@ -281,6 +287,7 @@ function closeTab(tab: Tab): void {
     tab.view = null;
   }
   if (tab.web?.opened) web.webClose(tab.web.label).catch((e) => console.error("Web sekmesi kapatılamadı", e));
+  tab.ai?.dispose(); // konuşma da silinir
   tabs.splice(i, 1);
   if (active === tab) {
     active = null;
@@ -331,6 +338,27 @@ function openWebTab(url = ""): Tab {
 }
 
 const webTab = (label: string) => tabs.find((t) => t.web?.label === label);
+
+// ------------------------------------------------------------ Yapay zeka sekmeleri (ai/ai-tab.ts)
+
+/** PDF sekmeleri (web ve yapay zeka sekmeleri hariç) */
+const pdfTabs = () => tabs.filter((t) => !t.web && !t.ai);
+
+function makeAiTab(id: string, name: string): Tab {
+  const tab = makeTab({ path: "ai:" + id, name });
+  tab.ai = new AiTab(id);
+  tab.btn.classList.add("ai");
+  tab.btn.title = "Yapay zeka sohbeti";
+  $("stage").append(tab.ai.el);
+  return tab;
+}
+
+function openAiTab(): Tab {
+  const tab = makeAiTab(newAiTabId(), "Yeni sohbet");
+  tabs.push(tab);
+  activate(tab);
+  return tab;
+}
 
 function setTabName(tab: Tab, name: string): void {
   tab.name = name;
@@ -505,6 +533,8 @@ function initWeb(): void {
     if (url) web.openExternal(url).catch((e) => toast(message(e)));
   });
   $("btn-web").addEventListener("click", () => openWebTab());
+  $("btn-ai-tab").addEventListener("click", () => openAiTab());
+  $("btn-welcome-ai").addEventListener("click", () => openAiTab());
   $("btn-welcome-web").addEventListener("click", () => openWebTab());
   $("btn-web-nlm").addEventListener("click", () => {
     if (!active?.web) return;
@@ -866,7 +896,7 @@ function onKey(e: KeyboardEvent): void {
       w: () => active && closeTab(active),
       b: () => toggleSidebar(),
       k: () => calc.toggle(),
-      j: () => toggleAi(),
+      j: () => (e.shiftKey ? void openAiTab() : toggleAi()),
       tab: () => cycleTab(e.shiftKey ? -1 : 1),
       "+": () => zoomBy(1.15),
       "=": () => zoomBy(1.15),
@@ -910,8 +940,19 @@ async function init(): Promise<void> {
     toast,
     // Dosyalara eriş (ai/ajan-ui.ts)
     folder: () => saved.folder,
-    docs: () => tabs.filter((t) => !t.web && !t.data && t.path !== BOARD_TAB).map((t) => t.path),
+    docs: () => pdfTabs().filter((t) => !t.data && t.path !== BOARD_TAB).map((t) => t.path),
     openAt: (path, page) => void openAt(path, page),
+  });
+  initAiTabs({ // yapay zeka sekmesi: ek seçicideki açık PDF'ler, başlık ilk mesajdan
+    docs: () => pdfTabs().filter((t) => t.path !== BOARD_TAB).map((t) => ({ path: t.path, name: t.name, view: t.view })),
+    toast,
+    title: (id, title) => {
+      const t = tabs.find((x) => x.ai?.id === id);
+      if (t && t.name !== title) {
+        setTabName(t, title);
+        persist();
+      }
+    },
   });
   initMedia({
     current: () => (active?.view && !active.data && active.path !== BOARD_TAB ? { path: active.path, name: active.name } : null),
@@ -920,7 +961,7 @@ async function init(): Promise<void> {
   });
   initWeb();
   initMcp({
-    docs: () => tabs.filter((t) => !t.web).map((t) => ({ path: t.path, name: t.name, view: t.view, active: t === active, failed: t.failed })),
+    docs: () => pdfTabs().map((t) => ({ path: t.path, name: t.name, view: t.view, active: t === active, failed: t.failed })),
     activate: (path) => { const t = tabs.find((x) => x.path === path); if (t) activate(t); },
     load: async (path) => {
       const t = tabs.find((x) => x.path === path);
@@ -932,10 +973,12 @@ async function init(): Promise<void> {
     toast,
   });
 
+  let stateOk = true;
   try {
     const text = await backend.loadState();
     if (text) Object.assign(saved, JSON.parse(text));
   } catch (e) {
+    stateOk = false;
     console.error("Ayarlar okunamadı, varsayılanlarla devam", e);
   }
   tools.color = saved.color;
@@ -988,9 +1031,12 @@ async function init(): Promise<void> {
 
   // Önceki oturumun sekmeleri: yalnızca etkin olan hemen yüklenir
   for (const t of saved.tabs) {
-    if (!t.path.startsWith("web:")) tabs.push(makeTab(t));
+    if (t.path.startsWith("ai:")) {
+      if (validId(t.path.slice(3))) tabs.push(makeAiTab(t.path.slice(3), savedAiTitle(t.path.slice(3))));
+    } else if (!t.path.startsWith("web:")) tabs.push(makeTab(t));
     else if (normalizeInput(t.path.slice(4)).ok) tabs.push(makeWebTab(t.path.slice(4), t.name));
   }
+  if (stateOk) pruneAiTabs(tabs.flatMap((t) => (t.ai ? [t.ai.id] : []))); // sekmesi kalmayan konuşmalar
   const first = tabs.find((t) => tabKey(t) === saved.active) ?? tabs[0];
   if (first) activate(first);
   renderTabs();

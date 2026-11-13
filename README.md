@@ -92,6 +92,7 @@ Claude Desktop, Claude Code, Gemini CLI gibi uygulamalar DersApp'e bağlanıp a�
   - `select.ts` seç/taşı aracı
   - `calc.ts`, `calc-engine.ts` hesap makinesi (`node src/calc-engine.test.ts` ile test)
   - `ai/` yapay zeka paneli; öğretme talimatı `ai/prompts.ts` içinde; sağlayıcılar `ai/providers.ts`, Claude Code CLI `ai/cli-run.ts` + `ai/cli-stream.ts`
+  - `ai/ai-tab.ts` yapay zeka sekmesi (tam sekme sohbet; akış/çizim panel.ts `chatAsk` ile ortak), `ai/sohbet.ts` konuşma kaydı + başlık (`node src/ai/sohbet.test.ts`)
   - `ai/ajan.ts` Dosyalara eriş saf mantığı (kökler, atıflar, arama; `node src/ai/ajan.test.ts`), `ai/ajan-ui.ts` panel satırı + dizin
   - `exams.ts` sınav takvimi
   - `ai/recording.ts` + `ai/wav.ts` kayıtlı ders mantığı (`node src/ai/recording.test.ts`), `recording-ui.ts` pencere/üretim, `recording-player.ts` oynatıcı
@@ -133,6 +134,7 @@ indirilir. Motor dosyası `src/ai/tts-piper.ts`; Rust testleri `src-tauri/src/pi
 | Ctrl+K | Hesap makinesi |
 | Alt+S | Son yapay zeka yanıtını sesli oku / durdur |
 | Ctrl+J | Yapay zeka paneli |
+| Ctrl+Shift+J | Yeni yapay zeka sekmesi (tam sekme sohbet) |
 | 1-8 | Renk |
 | Shift (çizerken) | Düz çizgi, kare, daire |
 | Ctrl+Z / Ctrl+Y | Geri al / ileri al |
