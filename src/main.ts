@@ -18,6 +18,11 @@ import { GEMINI_URL, NOTEBOOKLM_URL, hostLabel, isNotebookLm, normalizeInput } f
 import { isOfficePath, isPptx, pptxCacheKey, progressText, stripExt } from "./office";
 import { initMedia, mediaStore, refreshMedia } from "./web/media-ui";
 import * as web from "./web/web-backend";
+import { isMobile } from "./platform";
+import "./mobile.css";
+
+// Telefon düzeni (mobile.css); masaüstüne özgü düğmeler CSS ile gizlenir
+if (isMobile) document.documentElement.classList.add("mobile");
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -339,6 +344,7 @@ function activate(tab: Tab): void {
   if (active?.web) hideWeb(active);
   active?.ai?.hide();
   active = tab;
+  if (isMobile && saved.sidebar) toggleSidebar(false); // telefonda dosyalar sayfası açılan dosyanın üstünü örtmesin
   if (tab.web) showWeb(tab);
   else if (tab.ai) tab.ai.show();
   else if (tab.view) showView(tab);
@@ -400,7 +406,10 @@ function cycleTab(step: number): void {
 
 async function openDialog(): Promise<void> {
   try {
-    openSources(await backend.pickPdfFiles());
+    const picked = await backend.pickPdfFiles();
+    openSources(picked);
+    // Telefon: dosya belgeler klasörüne kopyalandı; listede görünsün
+    if (isMobile && picked.length && listing) void browse(listing.path);
   } catch (e) {
     toast("Dosya seçilemedi: " + message(e));
   }
@@ -1088,7 +1097,7 @@ async function init(): Promise<void> {
     sendToNotebook: (file) => void sendToNotebookLm(file), // NotebookLM metni (ai/nblm-ui.ts)
   });
   initWeb();
-  initMcp({
+  if (!isMobile) initMcp({
     docs: () => pdfTabs().map((t) => ({ path: t.path, name: t.name, view: t.view, active: t === active, failed: t.failed })),
     activate: (path) => { const t = tabs.find((x) => x.path === path); if (t) activate(t); },
     load: async (path) => {
@@ -1111,7 +1120,14 @@ async function init(): Promise<void> {
   }
   tools.color = saved.color;
   tools.size = saved.size;
-  toggleSidebar(saved.sidebar);
+  toggleSidebar(isMobile ? false : saved.sidebar);
+  if (isMobile) {
+    // Telefonda klasör seçilmez: Dosyalar paneli uygulamanın belgeler klasörünü (açılan dosyaların kopyaları) gösterir
+    $("btn-folder").textContent = "Belgelerim";
+    $("btn-folder").title = "Uygulamaya kopyalanan PDF ve sunumlar";
+    $("side-empty").textContent = "Henüz dosya yok. + düğmesiyle bir PDF ya da sunum aç; uygulamaya kopyalanır ve burada listelenir.";
+    if (!saved.folder) saved.folder = await backend.pickFolder().catch(() => null);
+  }
   renderToolState();
 
   $("btn-open").addEventListener("click", () => void openDialog());
@@ -1162,6 +1178,7 @@ async function init(): Promise<void> {
     if (t.path.startsWith("ai:")) {
       if (validId(t.path.slice(3))) tabs.push(makeAiTab(t.path.slice(3), savedAiTitle(t.path.slice(3))));
     } else if (!t.path.startsWith("web:")) tabs.push(makeTab(t));
+    else if (isMobile) continue; // telefonda web sekmesi yok
     else if (normalizeInput(t.path.slice(4)).ok) tabs.push(makeWebTab(t.path.slice(4), t.name));
   }
   if (stateOk) pruneAiTabs(tabs.flatMap((t) => (t.ai ? [t.ai.id] : []))); // sekmesi kalmayan konuşmalar

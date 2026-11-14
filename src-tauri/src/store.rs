@@ -50,6 +50,33 @@ pub fn read_pdf(path: &str) -> Result<Vec<u8>, String> {
     fs::read(p).map_err(|e| format!("Dosya okunamadı: {e}"))
 }
 
+/// Telefonda seçilen dosyanın (içerik adresi, gerçek yol yok) uygulama içi adı: yalnızca son parça,
+/// yol ayırıcı ve denetim karakteri yok, uzantı PDF ya da sunum olmalı.
+pub fn import_name(name: &str) -> Option<String> {
+    let base = name.rsplit(['/', '\\']).next().unwrap_or("").trim();
+    let clean: String = base
+        .chars()
+        .map(|c| if c.is_control() || matches!(c, ':' | '*' | '?' | '"' | '<' | '>' | '|') { '_' } else { c })
+        .take(120)
+        .collect();
+    let clean = clean.trim_start_matches('.').to_string();
+    if clean.is_empty() || !is_listable(Path::new(&clean)) {
+        return None;
+    }
+    Some(clean)
+}
+
+/// Seçilen dosyanın baytlarını `dir` altına yazar (aynı ad varsa üzerine), tam yolu döndürür.
+pub fn import_file(dir: &Path, name: &str, data: &[u8]) -> Result<PathBuf, String> {
+    let name = import_name(name).ok_or("Yalnızca PDF ve sunum (.pptx) dosyaları açılabilir.")?;
+    fs::create_dir_all(dir).map_err(|e| format!("Belgeler klasörü oluşturulamadı: {e}"))?;
+    let path = dir.join(name);
+    let tmp = path.with_extension("tmp-yaz");
+    fs::write(&tmp, data).map_err(|e| format!("Dosya kopyalanamadı: {e}"))?;
+    fs::rename(&tmp, &path).map_err(|e| format!("Dosya kopyalanamadı: {e}"))?;
+    Ok(path)
+}
+
 /// Uygulamanın ürettiği PDF'i (test, özet) kullanıcının seçtiği yere yazar.
 pub fn write_pdf(path: &str, data: &[u8]) -> Result<(), String> {
     let p = Path::new(path);
@@ -192,6 +219,19 @@ mod tests {
         let _ = fs::remove_dir_all(&d);
         fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    #[test]
+    fn import_names() {
+        assert_eq!(import_name("ders.pdf").as_deref(), Some("ders.pdf"));
+        assert_eq!(import_name("../../x/Sunum 1.PPTX").as_deref(), Some("Sunum 1.PPTX"));
+        assert_eq!(import_name("a\\b:c.pdf").as_deref(), Some("b_c.pdf"));
+        assert_eq!(import_name(".pdf"), None);
+        assert_eq!(import_name("not.txt"), None);
+        let d = tmp("import");
+        let p = import_file(&d, "a.pdf", b"%PDF-1").unwrap();
+        assert_eq!(fs::read(&p).unwrap(), b"%PDF-1");
+        assert!(import_file(&d, "a.exe", b"x").is_err());
     }
 
     #[test]

@@ -105,10 +105,18 @@ fn convert(src: &str, base: &Path) -> Result<String, String> {
 /// Sunumu PDF'e çevirir, üretilen PDF'in yolunu döndürür.
 #[tauri::command]
 pub async fn office_to_pdf(app: AppHandle, path: String) -> Result<String, String> {
+    #[cfg(mobile)]
+    {
+        let _ = (app, path);
+        return Err("Bu özellik telefonda yok: .ppt/.odp için LibreOffice gerekir (yalnızca .pptx açılır).".into());
+    }
+    #[cfg(desktop)]
+    {
     let base = app.path().app_data_dir().map_err(|e| format!("Veri klasörü bulunamadı: {e}"))?;
     tauri::async_runtime::spawn_blocking(move || convert(&path, &base))
         .await
         .map_err(|e| format!("Çeviri işlemi çöktü: {e}"))?
+    }
 }
 
 /// Yerleşik dönüştürücü için dosya bilgisi.

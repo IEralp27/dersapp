@@ -2,7 +2,7 @@
 <html lang="tr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <title>DersApp</title>
     <link rel="stylesheet" href="/src/styles.css" />
     <script type="module" src="/src/main.ts" defer></script>
@@ -88,13 +88,14 @@
       <section id="stage">
         <div id="welcome">
           <h1>DersApp</h1>
-          <p>Bir PDF aç ya da dosyayı bu pencereye sürükleyip bırak.</p>
+          <p class="desktop-only">Bir PDF aç ya da dosyayı bu pencereye sürükleyip bırak.</p>
+          <p class="mobile-only">Bir PDF ya da sunum (.pptx) aç. Açtığın dosyalar uygulamaya kopyalanır, ☰ Dosyalar'da kalır.</p>
           <button id="btn-welcome-open" class="primary">PDF aç</button>
           <button id="btn-welcome-board">Beyaz tahta</button>
           <button id="btn-welcome-web">Site aç</button>
           <button id="btn-welcome-gemini" title="gemini.google.com'u web sekmesinde aç (Google aboneliğinle)">Gemini</button>
           <button id="btn-welcome-ai">Yapay zeka</button>
-          <p class="hint">Ctrl+O ile de açabilirsin</p>
+          <p class="hint desktop-only">Ctrl+O ile de açabilirsin</p>
         </div>
         <div id="web-host" hidden>
           <div id="web-note" hidden></div>

@@ -3,6 +3,7 @@
 // bu sayede arayüz tarayıcıda da denenebilir.
 import { invoke } from "@tauri-apps/api/core";
 import { OFFICE_EXTENSIONS, isOpenable } from "./office";
+import { isMobile } from "./platform";
 
 export const inTauri = "__TAURI_INTERNALS__" in window;
 
@@ -32,11 +33,13 @@ export function baseName(path: string): string {
   return path.split(/[\\/]/).pop() || path;
 }
 
+const PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+
 function browserPick(): Promise<PdfSource[]> {
   return new Promise((resolve) => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "application/pdf,.pdf,.pptx";
+    input.accept = `application/pdf,${PPTX_MIME},.pdf,.pptx`;
     input.multiple = true;
     input.onchange = async () => {
       const out: PdfSource[] = [];
@@ -50,8 +53,23 @@ function browserPick(): Promise<PdfSource[]> {
   });
 }
 
+/**
+ * Telefon: seçilen dosyayı uygulamanın belgeler klasörüne kopyalar, yolunu döndürür.
+ * Android'de seçilen dosyanın gerçek yolu yoktur (content:// adresi, dialog eklentisi ad da vermez);
+ * WebView'un dosya seçicisi ad + bayt verir, kopya sayesinde okuma/notlar/son açılanlar yol ile çalışır.
+ */
+async function importDoc(name: string, data: Uint8Array): Promise<PdfSource> {
+  const path = await invoke<string>("import_doc", data, { headers: { "x-file-name": encodeURIComponent(name) } });
+  return { path, name: baseName(path) };
+}
+
 export async function pickPdfFiles(): Promise<PdfSource[]> {
   if (!inTauri) return browserPick();
+  if (isMobile) {
+    const out: PdfSource[] = [];
+    for (const f of await browserPick()) out.push(await importDoc(f.name, f.data!));
+    return out;
+  }
   const { open } = await import("@tauri-apps/plugin-dialog");
   const picked = await open({
     multiple: true,
@@ -68,6 +86,8 @@ export async function pickPdfFiles(): Promise<PdfSource[]> {
 
 export async function pickFolder(): Promise<string | null> {
   if (!inTauri) return null;
+  // Telefonda klasör seçilmez: uygulamanın belgeler klasörü (açılan dosyaların kopyaları) listelenir
+  if (isMobile) return invoke<string>("docs_dir");
   const { open } = await import("@tauri-apps/plugin-dialog");
   const picked = await open({ directory: true, title: "Ders klasörünü seç" });
   return typeof picked === "string" ? picked : null;
@@ -130,6 +150,8 @@ export async function savePdfAs(defaultName: string, data: Uint8Array): Promise<
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
     return { path: "mem:" + defaultName, name: defaultName, data };
   }
+  // Telefon: kaydet penceresi content:// adresi verir; PDF belgeler klasörüne yazılır (Dosyalar panelinde görünür)
+  if (isMobile) return importDoc(defaultName, data);
   const { save } = await import("@tauri-apps/plugin-dialog");
   const path = await save({
     title: "PDF'i kaydet",
@@ -168,6 +190,7 @@ export async function saveNotes(path: string, json: string): Promise<void> {
 
 /** Pencereye sürüklenip bırakılan dosyaları dinler. */
 export async function onFilesDropped(cb: (sources: PdfSource[]) => void): Promise<void> {
+  if (isMobile) return; // telefonda sürükle-bırak yok
   if (inTauri) {
     const { getCurrentWebview } = await import("@tauri-apps/api/webview");
     await getCurrentWebview().onDragDropEvent((ev) => {

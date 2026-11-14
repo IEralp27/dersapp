@@ -151,6 +151,7 @@ export class PageView {
       if (!this.scrollFrame) this.scrollFrame = requestAnimationFrame(() => this.trackPage());
     });
     this.el.addEventListener("wheel", (e) => this.onWheel(e), { passive: false });
+    this.initPinch();
     this.pagesEl.addEventListener("pointerdown", (e) => this.onDown(e));
     this.pagesEl.addEventListener("pointermove", (e) => this.onMove(e));
     this.pagesEl.addEventListener("pointerup", (e) => this.onUp(e));
@@ -318,6 +319,53 @@ export class PageView {
       this.page = lo + 1;
       this.onInfo();
     }
+  }
+
+  /**
+   * Dokunmatik iki parmakla yakınlaştırma (telefon). Hareket boyunca yalnızca CSS ölçeği uygulanır
+   * (sayfalar yeniden çizilmez), parmaklar kalkınca gerçek ölçek ayarlanır. Tek parmak: tarayıcının kaydırması.
+   * Çizim aracı açıkken de iki parmak yakınlaştırır (tek parmak çizer).
+   */
+  private initPinch(): void {
+    let start = 0;
+    let ratio = 1;
+    const dist = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    const end = () => {
+      if (!start) return;
+      start = 0;
+      this.pagesEl.style.transform = "";
+      this.pagesEl.style.transformOrigin = "";
+      if (Math.abs(ratio - 1) > 0.02) this.setScale(this.scale * ratio);
+      ratio = 1;
+    };
+    this.el.addEventListener("touchstart", (e) => {
+      if (e.touches.length !== 2) return;
+      // İlk parmağın başlattığı kalem/şekil çizgisi iki parmak gelince iptal (iz bırakmasın)
+      const st = this.stroke;
+      if (st?.shape) {
+        this.stroke = null;
+        if (this.pagesEl.hasPointerCapture(st.pointerId)) this.pagesEl.releasePointerCapture(st.pointerId);
+        this.queueInk(st.slot);
+      }
+      start = dist(e.touches) || 1;
+      ratio = 1;
+      const r = this.pagesEl.getBoundingClientRect();
+      const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - r.left;
+      const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - r.top;
+      this.pagesEl.style.transformOrigin = `${cx}px ${cy}px`;
+    }, { passive: true });
+    this.el.addEventListener("touchmove", (e) => {
+      if (!start || e.touches.length !== 2) return;
+      e.preventDefault(); // iki parmakta sayfa kaymasın
+      const next = dist(e.touches) / start;
+      const s = Math.max(MIN_SCALE, Math.min(MAX_SCALE, this.scale * next));
+      ratio = s / this.scale;
+      this.pagesEl.style.transform = `scale(${ratio})`;
+    }, { passive: false });
+    this.el.addEventListener("touchend", (e) => {
+      if (e.touches.length < 2) end();
+    });
+    this.el.addEventListener("touchcancel", end);
   }
 
   private onWheel(e: WheelEvent): void {

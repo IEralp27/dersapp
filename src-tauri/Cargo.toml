@@ -19,10 +19,13 @@ tauri = { version = "2", features = ["unstable"] }
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# Piper indirmesi: ureq küçük, eşzamanlı bir HTTP istemcisi (async çalışma zamanı ve reqwest gerektirmez)
-ureq = { version = "3", default-features = false, features = ["rustls"] }
 sha2 = "0.10"
 md-5 = "0.10"
+
+# Yalnızca masaüstü (Piper indirmesi, "Bu sayfayı anlat"; telefonda bu modüller yok, bkz. src/mobile/)
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+# Piper indirmesi: ureq küçük, eşzamanlı bir HTTP istemcisi (async çalışma zamanı ve reqwest gerektirmez)
+ureq = { version = "3", default-features = false, features = ["rustls"] }
 
 [profile.release]
 codegen-units = 1

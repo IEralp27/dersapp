@@ -14,6 +14,7 @@
 import { CLI_MODELS } from "./cli-stream";
 import { GEMINI_CLI_MODELS, GEMINI_PLAN_HELP } from "./gemini-stream";
 import type { CliAgent } from "./cli-run";
+import { isMobile } from "../platform";
 
 export type Protocol = "anthropic" | "openai" | "cli";
 
@@ -32,7 +33,7 @@ export interface Preset {
   modelHint?: string;
 }
 
-export const PRESETS: Preset[] = [
+const ALL_PRESETS: Preset[] = [
   {
     id: "anthropic", label: "Anthropic (Claude)", protocol: "anthropic",
     baseUrl: "https://api.anthropic.com/v1", needsKey: true,
@@ -82,6 +83,9 @@ export const PRESETS: Preset[] = [
     note: "LM Studio gibi yerel sunucularda sunucu ayarlarından CORS'u açman gerekir.",
   },
 ];
+
+/** Telefonda yerel CLI'lar (Claude Code, Gemini) ve bilgisayardaki Ollama yok: yalnızca API anahtarlı sağlayıcılar. */
+export const PRESETS: Preset[] = isMobile ? ALL_PRESETS.filter((p) => p.protocol !== "cli" && p.id !== "ollama") : ALL_PRESETS;
 
 export interface ProviderConfig {
   baseUrl: string;

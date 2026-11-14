@@ -2,12 +2,20 @@ mod ajan;
 mod cli;
 mod kayit;
 mod office;
-mod piper;
 mod store;
+// Masaüstüne özgü: Piper (indirilen ikili + süreç), web sekmesi (çoklu webview, masaüstü pencereleri).
+// Telefonda aynı adlı komutlar "bu özellik telefonda yok" der (src/mobile/).
+#[cfg(desktop)]
+mod piper;
+#[cfg(desktop)]
 mod web;
+#[cfg(mobile)]
+mod mobile;
+#[cfg(mobile)]
+use mobile::{piper, web};
 
 use std::path::PathBuf;
-use tauri::{ipc::Response, AppHandle, Manager};
+use tauri::{ipc::Request, ipc::Response, AppHandle, Manager};
 
 fn data_dir(app: &AppHandle) -> Result<PathBuf, String> {
     app.path()
@@ -24,6 +32,47 @@ async fn read_pdf(path: String) -> Result<Response, String> {
 #[tauri::command]
 async fn write_pdf(path: String, data: Vec<u8>) -> Result<(), String> {
     store::write_pdf(&path, &data)
+}
+
+/// Uygulamanın kendi belgeler klasörü (telefonda seçilen dosyalar buraya kopyalanır).
+#[tauri::command]
+async fn docs_dir(app: AppHandle) -> Result<String, String> {
+    let dir = data_dir(&app)?.join("belgeler");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Belgeler klasörü oluşturulamadı: {e}"))?;
+    Ok(dir.to_string_lossy().into_owned())
+}
+
+/// Telefon: seçilen dosyanın baytlarını (ham istek gövdesi) belgeler klasörüne yazar, yolunu döndürür.
+/// Android'de seçilen dosyanın gerçek yolu yoktur (content:// adresi); kopya sayesinde PDF okuma, notlar,
+/// son açılanlar ve yeniden açılış masaüstündeki gibi yol ile çalışır. Başlık: x-file-name (URI kodlu).
+#[tauri::command]
+async fn import_doc(app: AppHandle, request: Request<'_>) -> Result<String, String> {
+    let raw = request.headers().get("x-file-name").and_then(|v| v.to_str().ok()).unwrap_or("");
+    let name = percent_decode(raw);
+    let tauri::ipc::InvokeBody::Raw(data) = request.body() else {
+        return Err("Dosya verisi gelmedi.".into());
+    };
+    let path = store::import_file(&data_dir(&app)?.join("belgeler"), &name, data)?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+/// encodeURIComponent'in tersi (geçersiz dizilerde olduğu gibi bırakır).
+fn percent_decode(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' && i + 2 < b.len() {
+            if let Some(v) = std::str::from_utf8(&b[i + 1..i + 3]).ok().and_then(|h| u8::from_str_radix(h, 16).ok()) {
+                out.push(v);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(b[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 #[tauri::command]
@@ -94,6 +143,13 @@ async fn cli_start(
     args: cli::CliStart,
     on_event: tauri::ipc::Channel<cli::CliEvent>,
 ) -> Result<(), String> {
+    // Telefonda Claude/Gemini CLI süreci başlatılamaz
+    #[cfg(mobile)]
+    {
+        let _ = (runs, args, on_event);
+        return Err(mobile::YOK.into());
+    }
+    #[cfg(desktop)]
     cli::start(&runs, args, on_event)
 }
 
@@ -122,7 +178,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            read_pdf, write_pdf, list_dir, load_state, save_state, load_notes, save_notes,
+            read_pdf, write_pdf, list_dir, docs_dir, import_doc, load_state, save_state, load_notes, save_notes,
             mcp_take_requests, mcp_respond, mcp_context,
             load_profile, save_profile, profile_path,
             cli_prepare, cli_start, cli_stop,
