@@ -189,6 +189,18 @@ export function toolStatus(name: string, input: Record<string, unknown> | null |
   const i = input ?? {};
   const str = (k: string) => (typeof i[k] === "string" ? (i[k] as string) : "");
   switch (name) {
+    // Gemini CLI araçları (read_file, grep_search, glob, list_directory) ve yeniden deneme bildirimi
+    case "__retry":
+      return i.status === 429
+        ? `⏳ Gemini kota sınırında, CLI yeniden deniyor (${String(i.attempt ?? "")}. deneme)… Durdur ile iptal edebilirsin.`
+        : `⏳ Gemini yoğun, CLI yeniden deniyor…`;
+    case "list_directory":
+      return `🗂️ ${clip(baseName(str("dir_path")) || "Klasör", 30)} listeleniyor…`;
+    case "glob":
+      return toolStatus("Glob", input);
+    case "grep_search":
+      return toolStatus("Grep", { pattern: str("pattern"), glob: str("include_pattern") || str("include"), path: str("dir_path") });
+    case "read_file":
     case "Read": {
       const f = str("file_path");
       if (!f) return "📄 Dosya okunuyor…";
@@ -357,6 +369,8 @@ export interface AgentView {
   converted?: Converted[];
   /** Klasördeki .pptx'lerin metin sürümleri: klasör + hazır olanlar */
   slides?: { dir: string; files: { name: string; file: string }[] };
+  /** Hangi CLI (araç adları ve PDF okuma kuralı farklı); yoksa Claude */
+  cli?: "claude" | "gemini";
 }
 
 /** "X.pptx sunumu şu PDF olarak okunabilir: <yol>; sayfa = slayt" */
@@ -367,6 +381,20 @@ export function presentationLine(name: string, pdf: string): string {
 
 /** CLI sistem talimatına eklenen not: kökler, açık belge/sayfa, araç kullanımı, atıf biçimi. */
 export function agentNote(v: AgentView): string {
+  if (v.cli === "gemini") return claudeToGemini(agentNoteBase(v));
+  return agentNoteBase(v);
+}
+
+/** Gemini CLI'da araç adları farklı ve read_file PDF'i sayfa aralığıyla okuyamaz (tamamını okur). */
+function claudeToGemini(note: string): string {
+  return note
+    .replace(/Glob ile dosyaları bul, Grep ile terimi ara, Read ile PDF'i sayfa aralığı vererek oku \("pages": "1-5"; \n?bir seferde en çok 20 sayfa\)\. Büyük PDF'i baştan sona okuma; önce ilgili sayfaları bul\./,
+      "glob ile dosyaları bul, grep_search ile terimi ara, read_file ile oku. read_file PDF'in TAMAMINI okur "
+      + "(sayfa aralığı verilemez): büyük PDF'leri okumadan önce .md metin dosyalarına ve grep_search'e başvur.")
+    .replace(/\b(Read|Grep|Glob)(?= ile| kullan| aracı| PDF)/g, (t) => ({ Read: "read_file", Grep: "grep_search", Glob: "glob" })[t] ?? t);
+}
+
+function agentNoteBase(v: AgentView): string {
   const roots = v.roots.map((r, i) => `- ${r}${i === 0 ? " (çalışma klasörü)" : ""}`).join("\n");
   let doc = v.doc
     ? `Öğrenci şu an "${v.doc.name}" belgesinin ${v.doc.page}. sayfasına bakıyor (toplam ${v.doc.pages} sayfa). `

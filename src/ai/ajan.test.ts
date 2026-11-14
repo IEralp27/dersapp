@@ -145,4 +145,18 @@ t("sunumlar: PDF yolu, metin dosyası adı, takma ad, atıf", () => {
   assert.ok(n.includes("C:/Data/sunum-metin") && n.includes("b.pptx -> b-1.md"));
 });
 
+t("Gemini CLI: araç durumları ve not", () => {
+  assert.equal(toolStatus("read_file", { file_path: "/home/e/Okul/TER201_3.pdf" }), "📄 TER201_3.pdf okunuyor…");
+  assert.equal(toolStatus("grep_search", { pattern: "entropi", include_pattern: "*.md" }), "🔎 'entropi' aranıyor (*.md)…");
+  assert.equal(toolStatus("glob", { pattern: "*.pdf" }), "🗂️ Dosyalar listeleniyor (*.pdf)…");
+  assert.equal(toolStatus("list_directory", { dir_path: "/home/e/Okul" }), "🗂️ Okul listeleniyor…");
+  assert.match(toolStatus("__retry", { status: 429, attempt: 2 })!, /kota/);
+  const v = { roots: ["/home/e/Read"], doc: null };
+  const g = agentNote({ ...v, cli: "gemini" });
+  assert.ok(g.includes("grep_search ile terimi ara") && g.includes("TAMAMINI") && !g.includes("\"pages\""));
+  assert.ok(g.includes("- /home/e/Read (çalışma klasörü)"), "yollar değişmez");
+  assert.ok(!/\b(Read|Grep|Glob) ile/.test(g));
+  assert.equal(agentNote(v), agentNote({ ...v, cli: "claude" }));
+});
+
 console.log(`ajan: ${count} test geçti`);

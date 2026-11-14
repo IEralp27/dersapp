@@ -1,6 +1,6 @@
 // Çalıştırma: node src/web/web.test.ts
 import assert from "node:assert/strict";
-import { NOTEBOOKLM_URL, checkUrl, hostLabel, isNotebookLm, normalizeInput } from "./url.ts";
+import { GEMINI_URL, NOTEBOOKLM_URL, checkUrl, hostLabel, isNotebookLm, normalizeInput } from "./url.ts";
 import { MAX_PER_PDF, MEDIA_KEY, MediaStore, mediaKind, mediaMime } from "./media-store.ts";
 import { MIN_TEXT, decodeEntities, htmlToText, pageProblem } from "./html-text.ts";
 import { webPagePrompt } from "../ai/prompts.ts";
@@ -18,6 +18,8 @@ const ok = (r: ReturnType<typeof checkUrl>) => (r.ok ? r.url : "HATA:" + r.error
 {
   assert.equal(ok(normalizeInput("notebooklm")), NOTEBOOKLM_URL);
   assert.equal(ok(normalizeInput("  Gemini Notebook ")), NOTEBOOKLM_URL);
+  assert.equal(ok(normalizeInput("Gemini")), GEMINI_URL);
+  assert.equal(hostLabel("https://gemini.google.com/app"), "Gemini");
   assert.equal(ok(normalizeInput("ornek.com")), "https://ornek.com/");
   assert.equal(ok(normalizeInput("ornek.com.tr/a?b=1#c")), "https://ornek.com.tr/a?b=1#c");
   assert.equal(ok(normalizeInput("ornek.com:8080/x")), "https://ornek.com:8080/x");

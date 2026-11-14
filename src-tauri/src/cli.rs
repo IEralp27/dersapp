@@ -1,5 +1,7 @@
-//! Claude Code CLI sağlayıcısı: yerelde kurulu `claude` komutunu başlatır, stdout satırlarını
-//! (stream-json) arayüze akıtır, durdurulunca süreci öldürür.
+//! CLI sağlayıcıları: yerelde kurulu `claude` (Claude Code) ya da `gemini` (Gemini CLI) komutunu
+//! başlatır, stdout satırlarını (stream-json) arayüze akıtır, durdurulunca süreci öldürür.
+//! İkisi aynı tesisatı paylaşır (program bulma, gizli konsol, geçici klasör, durdurma); yalnızca
+//! komut satırı farklı (`claude_args` / `gemini_args`).
 //!
 //! Güvenlik ve sağlamlık:
 //!  - İstem stdin'den, sistem talimatı dosyadan (--system-prompt-file) gider; kullanıcı metni
@@ -39,6 +41,9 @@ pub struct CliStart {
     /// Dosyalara erişim (ajan kipi). Yoksa eski davranış: yalnızca geçici klasördeki görüntüler.
     #[serde(default)]
     pub access: Option<CliAccess>,
+    /// Hangi CLI: "claude" (varsayılan) ya da "gemini"
+    #[serde(default)]
+    pub cli: String,
 }
 
 /// Ajan kipi: CLI'ya salt okunur Read/Glob/Grep araçları ve kök klasörler verilir.
@@ -58,6 +63,8 @@ pub struct CliAccess {
 pub enum CliEvent {
     /// stdout'tan bir satır (stream-json olayı)
     Line { line: String },
+    /// stderr'den bir satır (yalnızca Gemini: 429 yeniden deneme bildirimi gibi canlı durumlar için)
+    Stderr { line: String },
     /// Süreç bitti. `cancelled`: kullanıcı durdurdu.
     Done { code: Option<i32>, stderr: String, cancelled: bool },
 }
@@ -123,15 +130,20 @@ pub fn prepare(run_id: &str, images: &[CliImage]) -> Result<Vec<String>, String>
     Ok(paths)
 }
 
-/// `claude` programını bulur. Windows'ta yerel kurulum `claude.exe`, npm kurulumu `claude.cmd`.
+/// CLI programını bulur (`claude` ya da `gemini`). Windows'ta yerel kurulum `<ad>.exe`, npm kurulumu `<ad>.cmd`.
 /// Masaüstünden açılan uygulamanın PATH'i eksik olabileceği için bilinen kurulum yerlerine de bakar.
-fn find_claude() -> Option<PathBuf> {
-    let names: &[&str] = if cfg!(windows) { &["claude.exe", "claude.cmd"] } else { &["claude"] };
+fn find_cli(base: &str) -> Option<PathBuf> {
+    let names: Vec<String> = if cfg!(windows) {
+        vec![format!("{base}.exe"), format!("{base}.cmd")]
+    } else {
+        vec![base.to_string()]
+    };
     let mut dirs: Vec<PathBuf> = std::env::var_os("PATH").map(|p| std::env::split_paths(&p).collect()).unwrap_or_default();
     let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from);
     if let Some(h) = &home {
         dirs.push(h.join(".local").join("bin"));
         dirs.push(h.join(".claude").join("local"));
+        dirs.push(h.join(".npm-global").join("bin"));
     }
     if cfg!(windows) {
         if let Some(a) = std::env::var_os("APPDATA") {
@@ -139,9 +151,10 @@ fn find_claude() -> Option<PathBuf> {
         }
     } else {
         dirs.push(PathBuf::from("/usr/local/bin"));
+        dirs.push(PathBuf::from("/usr/bin"));
         dirs.push(PathBuf::from("/opt/homebrew/bin"));
     }
-    for name in names {
+    for name in &names {
         for d in &dirs {
             let p = d.join(name);
             if p.is_file() {
@@ -177,7 +190,8 @@ pub fn start(runs: &CliRuns, a: CliStart, on_event: Channel<CliEvent>) -> Result
     if !model.is_empty() && !valid_model(model) {
         return Err("Model adı geçersiz karakter içeriyor.".into());
     }
-    let exe = match find_claude() {
+    let gemini = a.cli == "gemini";
+    let exe = match find_cli(if gemini { "gemini" } else { "claude" }) {
         Some(p) => p,
         None => {
             cleanup(&a.run_id);
@@ -185,48 +199,16 @@ pub fn start(runs: &CliRuns, a: CliStart, on_event: Channel<CliEvent>) -> Result
         }
     };
     std::fs::create_dir_all(&dir).map_err(|e| format!("Geçici klasör oluşturulamadı: {e}"))?;
-    let sys_file = dir.join("sistem.txt");
-    std::fs::write(&sys_file, &a.system).map_err(|e| format!("Talimat dosyası yazılamadı: {e}"))?;
-
-    let mut cmd = command_for(&exe);
-    cmd.args(["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]);
     let roots = a.access.as_ref().map(|x| crate::ajan::canonical_roots(&x.roots).0).unwrap_or_default();
-    match a.access.as_ref().filter(|_| !roots.is_empty()) {
-        // Ajan kipi (bayraklar: code.claude.com/docs/en/cli-reference, permissions; 2026-11):
-        //  --tools yalnızca okuma araçlarını bırakır (Bash/Edit/Write/WebFetch yok),
-        //  --permission-mode dontAsk izin isteyecek her çağrıyı reddeder (çalışma dizinleri dışında okuma),
-        //  --restricted dosya araçlarını çalışma dizinleriyle sınırlar ve kullanıcı/proje ayarlarını
-        //  (kancalar, izin kuralları) yüklemez; --settings dosyası yine de okumayı köklerle sınırlar.
-        Some(x) => {
-            let settings = dir.join("ayarlar.json");
-            std::fs::write(&settings, r#"{"permissions":{"blockReadsOutsideWorkingDirectories":true}}"#)
-                .map_err(|e| format!("Ayar dosyası yazılamadı: {e}"))?;
-            cmd.current_dir(crate::ajan::plain(&roots[0]))
-                .args(["--tools", "Read,Glob,Grep", "--permission-mode", "dontAsk"])
-                .args(["--disallowedTools", "mcp__*"])
-                .arg("--settings")
-                .arg(&settings)
-                .args(["--max-turns", &x.max_turns.clamp(1, 100).to_string()]);
-            if x.restricted {
-                cmd.arg("--restricted");
-            } else {
-                cmd.args(["--setting-sources", "user"]);
-            }
-            // Görüntüler geçici klasörde: o da okunabilsin
-            cmd.arg("--add-dir").arg(&dir);
-            for r in &roots[1..] {
-                cmd.arg("--add-dir").arg(crate::ajan::plain(r));
-            }
-        }
-        None => {
-            cmd.current_dir(&dir).args(["--tools", "Read", "--allowedTools", "Read"]);
-        }
-    }
-    cmd.args(["--strict-mcp-config", "--no-session-persistence"])
-        .arg("--system-prompt-file")
-        .arg(&sys_file);
-    if !model.is_empty() {
-        cmd.args(["--model", model]);
+    let mut cmd = command_for(&exe);
+    let built = if gemini {
+        gemini_args(&mut cmd, &dir, &a, model, &roots)
+    } else {
+        claude_args(&mut cmd, &dir, &a, model, &roots)
+    };
+    if let Err(e) = built {
+        cleanup(&a.run_id);
+        return Err(e);
     }
     cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = match cmd.spawn() {
@@ -236,7 +218,7 @@ pub fn start(runs: &CliRuns, a: CliStart, on_event: Channel<CliEvent>) -> Result
             return Err(if e.kind() == std::io::ErrorKind::NotFound {
                 NOT_FOUND.into()
             } else {
-                format!("Claude Code başlatılamadı ({}): {e}", exe.display())
+                format!("{} başlatılamadı ({}): {e}", if gemini { "Gemini CLI" } else { "Claude Code" }, exe.display())
             });
         }
     };
@@ -252,12 +234,31 @@ pub fn start(runs: &CliRuns, a: CliStart, on_event: Channel<CliEvent>) -> Result
             let _ = w.write_all(prompt.as_bytes());
         });
     }
-    // stderr'i topla (en çok 8 KB).
+    // stderr'i topla (en çok 8 KB). Gemini'de satırlar ayrıca canlı gönderilir (yeniden deneme durumları).
+    let err_events = if gemini { Some(on_event.clone()) } else { None };
     let err_thread = std::thread::spawn(move || {
         let mut s = String::new();
         if let Some(mut r) = stderr {
             let mut buf = Vec::new();
-            let _ = r.read_to_end(&mut buf);
+            match &err_events {
+                Some(ch) => {
+                    for line in BufReader::new(r).split(b'\n') {
+                        let Ok(line) = line else { break };
+                        let text = String::from_utf8_lossy(&line).trim_end().to_string();
+                        if !text.is_empty() && text.len() <= 2000 {
+                            let _ = ch.send(CliEvent::Stderr { line: text });
+                        }
+                        buf.extend_from_slice(&line);
+                        buf.push(b'\n');
+                        if buf.len() > 16384 {
+                            buf.drain(..buf.len() - 8192);
+                        }
+                    }
+                }
+                None => {
+                    let _ = r.read_to_end(&mut buf);
+                }
+            }
             s = String::from_utf8_lossy(&buf[buf.len().saturating_sub(8192)..]).into_owned();
         }
         s
@@ -286,6 +287,111 @@ pub fn start(runs: &CliRuns, a: CliStart, on_event: Channel<CliEvent>) -> Result
         cleanup(&run_id);
         let _ = on_event.send(CliEvent::Done { code, stderr, cancelled });
     });
+    Ok(())
+}
+
+/// Claude Code komut satırı (değişmedi; eski `start` içinden taşındı).
+fn claude_args(cmd: &mut Command, dir: &Path, a: &CliStart, model: &str, roots: &[PathBuf]) -> Result<(), String> {
+    let sys_file = dir.join("sistem.txt");
+    std::fs::write(&sys_file, &a.system).map_err(|e| format!("Talimat dosyası yazılamadı: {e}"))?;
+    cmd.args(["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]);
+    match a.access.as_ref().filter(|_| !roots.is_empty()) {
+        // Ajan kipi (bayraklar: code.claude.com/docs/en/cli-reference, permissions; 2026-11):
+        //  --tools yalnızca okuma araçlarını bırakır (Bash/Edit/Write/WebFetch yok),
+        //  --permission-mode dontAsk izin isteyecek her çağrıyı reddeder (çalışma dizinleri dışında okuma),
+        //  --restricted dosya araçlarını çalışma dizinleriyle sınırlar ve kullanıcı/proje ayarlarını
+        //  (kancalar, izin kuralları) yüklemez; --settings dosyası yine de okumayı köklerle sınırlar.
+        Some(x) => {
+            let settings = dir.join("ayarlar.json");
+            std::fs::write(&settings, r#"{"permissions":{"blockReadsOutsideWorkingDirectories":true}}"#)
+                .map_err(|e| format!("Ayar dosyası yazılamadı: {e}"))?;
+            cmd.current_dir(crate::ajan::plain(&roots[0]))
+                .args(["--tools", "Read,Glob,Grep", "--permission-mode", "dontAsk"])
+                .args(["--disallowedTools", "mcp__*"])
+                .arg("--settings")
+                .arg(&settings)
+                .args(["--max-turns", &x.max_turns.clamp(1, 100).to_string()]);
+            if x.restricted {
+                cmd.arg("--restricted");
+            } else {
+                cmd.args(["--setting-sources", "user"]);
+            }
+            // Görüntüler geçici klasörde: o da okunabilsin
+            cmd.arg("--add-dir").arg(dir);
+            for r in &roots[1..] {
+                cmd.arg("--add-dir").arg(crate::ajan::plain(r));
+            }
+        }
+        None => {
+            cmd.current_dir(dir).args(["--tools", "Read", "--allowedTools", "Read"]);
+        }
+    }
+    cmd.args(["--strict-mcp-config", "--no-session-persistence"])
+        .arg("--system-prompt-file")
+        .arg(&sys_file);
+    if !model.is_empty() {
+        cmd.args(["--model", model]);
+    }
+    Ok(())
+}
+
+/// Gemini CLI politika dosyası (Policy Engine TOML): her araç ve her MCP aracı reddedilir, yalnızca okuma
+/// araçlarına izin verilir. Reddedilen araçlar modele hiç sunulmaz (gemini 0.68 ile denendi).
+const GEMINI_POLICY: &str = r#"# DersApp: yalnızca okuma
+[[rule]]
+toolName = "*"
+decision = "deny"
+priority = 900
+deny_message = "DersApp: yalnizca okuma araclari acik."
+
+[[rule]]
+toolName = "*"
+mcpName = "*"
+decision = "deny"
+priority = 990
+
+[[rule]]
+toolName = ["read_file", "glob", "grep_search", "list_directory"]
+decision = "allow"
+priority = 980
+"#;
+
+/// Gemini CLI komut satırı (geminicli.com/docs: cli/cli-reference, cli/headless, cli/system-prompt,
+/// reference/policy-engine, cli/trusted-folders; 2026-11, gemini 0.68.0 `--help` ile doğrulandı):
+///  - `-p ""` başsız kip; istem stdin'den gelir (CLI stdin'i `-p` metninin önüne ekler, en çok 8 MB).
+///  - Sistem talimatı `GEMINI_SYSTEM_MD=<dosya>` ortam değişkeniyle (yerleşik talimatın tamamının yerine geçer).
+///  - Çalışma dizini hep geçici klasör (proje `.gemini/` ayarı yok); kökler `--include-directories` ile.
+///    Dosya araçları yalnızca çalışma alanı klasörlerinde (ve CLI'nın kendi geçici klasöründe) çalışır.
+///  - `--approval-mode default`: başsız kipte "onay iste" kararları reddedilir; politika dosyası ayrıca
+///    hem kullanıcı (`--policy`) hem yönetici (`--admin-policy`) katmanında her şeyi reddeder, okuma araçları açık.
+///  - `--allowed-mcp-server-names` var olmayan bir adla: kullanıcının MCP sunucuları yüklenmez.
+///  - `--skip-trust`: klasör güveni açıksa başsız kip çıkış kodu 55 ile durur; güvenilen yalnızca geçici klasör.
+///  - Tur sınırı bayrağı yok (yalnızca settings.json `model.maxSessionTurns`); aşılırsa çıkış kodu 53.
+fn gemini_args(cmd: &mut Command, dir: &Path, a: &CliStart, model: &str, roots: &[PathBuf]) -> Result<(), String> {
+    let sys_file = dir.join("sistem.md");
+    std::fs::write(&sys_file, &a.system).map_err(|e| format!("Talimat dosyası yazılamadı: {e}"))?;
+    let policy = dir.join("politika.toml");
+    std::fs::write(&policy, GEMINI_POLICY).map_err(|e| format!("Politika dosyası yazılamadı: {e}"))?;
+    cmd.current_dir(dir)
+        .env("GEMINI_SYSTEM_MD", &sys_file)
+        .args(["-o", "stream-json", "--skip-trust", "--approval-mode", "default"])
+        .arg("--policy")
+        .arg(&policy)
+        .arg("--admin-policy")
+        .arg(&policy)
+        .args(["--allowed-mcp-server-names", "dersapp-mcp-yok"]);
+    if a.access.is_some() {
+        // Virgül, dizi bayrağında ayırıcı sayılır: virgüllü yol eklenmez (atlanır)
+        for r in roots.iter().map(|r| crate::ajan::plain(r)) {
+            if !r.contains(',') {
+                cmd.arg("--include-directories").arg(r);
+            }
+        }
+    }
+    if !model.is_empty() {
+        cmd.args(["-m", model]);
+    }
+    cmd.args(["-p", ""]);
     Ok(())
 }
 
@@ -325,5 +431,29 @@ mod tests {
         assert!(run_dir("../x").is_err());
         assert!(valid_model("claude-sonnet-5[1m]"));
         assert!(!valid_model("sonnet & calc"));
+    }
+
+    #[test]
+    fn gemini_command_line() {
+        let dir = std::env::temp_dir().join("dersapp-cli-test-gemini");
+        std::fs::create_dir_all(&dir).unwrap();
+        let a = CliStart {
+            run_id: "test-gemini".into(),
+            model: "flash".into(),
+            system: "talimat".into(),
+            prompt: String::new(),
+            access: Some(CliAccess { roots: vec![], max_turns: 10, restricted: true }),
+            cli: "gemini".into(),
+        };
+        let mut cmd = Command::new("gemini");
+        gemini_args(&mut cmd, &dir, &a, "flash", &[dir.clone(), PathBuf::from("/a,b")]).unwrap();
+        let args: Vec<String> = cmd.get_args().map(|x| x.to_string_lossy().into_owned()).collect();
+        let s = args.join(" ");
+        assert!(s.contains("-o stream-json --skip-trust --approval-mode default --policy"));
+        assert!(s.contains("--admin-policy") && s.contains("-m flash"));
+        assert_eq!(args.iter().filter(|x| *x == "--include-directories").count(), 1, "virgüllü yol atlanır");
+        assert_eq!(&args[args.len() - 2..], ["-p", ""]);
+        assert!(std::fs::read_to_string(dir.join("politika.toml")).unwrap().contains("grep_search"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

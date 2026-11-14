@@ -91,7 +91,7 @@ async function runOnce(o: CliRunOptions, restricted: boolean): Promise<void> {
     ch.onmessage = (ev) => {
       if (stopped) return;
       if (ev.kind === "line") parser.line(ev.line);
-      else finish?.(ev);
+      else if (ev.kind === "done") finish?.(ev);
     };
     try {
       await invoke("cli_start", { args: { runId, model, system: o.system + note, prompt, access }, onEvent: ch });

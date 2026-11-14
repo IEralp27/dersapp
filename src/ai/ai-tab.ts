@@ -287,7 +287,7 @@ export class AiTab {
       const box = el("div", "ai-empty");
       box.innerHTML = svg(ICONS.ai);
       box.append(el("p", "", "Herhangi bir ders sorusu sor, çalışma planı iste ya da açık PDF'lerini \"PDF ekle\" ile soruya ekle. "
-        + "Claude Code CLI ve \"Dosyalara eriş\" açıkken çalışma klasöründeki dosyaları kendisi okur; [dosya.pdf s.12] etiketine tıklayınca o sayfa açılır."));
+        + "Claude Code CLI ya da Gemini CLI ve \"Dosyalara eriş\" açıkken çalışma klasöründeki dosyaları kendisi okur; [dosya.pdf s.12] etiketine tıklayınca o sayfa açılır."));
       col.prepend(box);
     }
     this.renderCompose();

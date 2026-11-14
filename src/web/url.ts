@@ -2,6 +2,8 @@
 // Rust tarafı (src-tauri/src/web.rs allowed_url) aynı kuralı ayrıca uygular; bu yalnızca arayüzdeki ilk eleme.
 
 export const NOTEBOOKLM_URL = "https://notebooklm.google.com/";
+/** Gemini uygulaması (tüketici aboneliği burada her planla çalışır) */
+export const GEMINI_URL = "https://gemini.google.com/";
 
 export type UrlResult = { ok: true; url: string } | { ok: false; error: string };
 
@@ -37,6 +39,7 @@ export function normalizeInput(input: string): UrlResult {
   const s = input.trim();
   if (!s) return { ok: false, error: "Bir adres yaz." };
   if (/^(notebooklm|notebook ?lm|gemini notebook)$/i.test(s)) return { ok: true, url: NOTEBOOKLM_URL };
+  if (/^gemini$/i.test(s)) return { ok: true, url: GEMINI_URL };
   if (/^[a-z][a-z0-9+.-]*:/i.test(s) && !/^[^\s/:]+\.[^\s/:]+:\d+/.test(s)) {
     // şeması olan adres (http:, https:, file:, javascript: ...)
     return checkUrl(s);
@@ -58,7 +61,7 @@ export function isNotebookLm(url: string): boolean {
 export function hostLabel(url: string): string {
   try {
     const h = new URL(url).hostname.replace(/^www\./, "");
-    return h === "notebooklm.google.com" ? "NotebookLM" : h || "Web";
+    return h === "notebooklm.google.com" ? "NotebookLM" : h === "gemini.google.com" ? "Gemini" : h || "Web";
   } catch {
     return "Web";
   }

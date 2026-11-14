@@ -9,6 +9,14 @@ Her satırı dene, olursa işaretle. Olmazsa hata metnini/ekran görüntüsünü
 - [ ] Uzun yanıtta "Durdur": akış hemen durur, Görev Yöneticisi'nde `claude` süreci kalmaz.
 - [ ] `claude` kurulu değilken dene: ne yapılacağını söyleyen Türkçe hata çıkar.
 
+## Gemini CLI (abonelik)
+- [ ] `npm install -g @google/gemini-cli`, terminalde `gemini` ile giriş (ya da `~/.gemini/.env` içinde `GEMINI_API_KEY`). Ayarlarda "Gemini CLI (abonelik)", "Anlat": yanıt akar, konsol penceresi açılmaz.
+- [ ] Windows'ta `gemini.cmd` bulunuyor mu (`%APPDATA%\npm`); boş `-p ""` argümanı sorun çıkarıyor mu.
+- [ ] Sayfa görüntüsüyle sor: görüntü anlatılıyor (`@"yol"`). Öğrenci metnindeki `@` dosya sanılmıyor.
+- [ ] Dosyalara eriş açık: "📄 … okunuyor" satırları, [dosya.pdf s.N] atıfları; klasör dışı dosya ve yazma reddediliyor.
+- [ ] Durdur: `gemini`/`node` süreci kalmıyor. AI Plus/Pro hesabıyla: plan hatası Türkçe ve "Gemini" web sekmesini öneriyor. Kota (429): "⏳ … yeniden deniyor" satırı.
+- [ ] Karşılama ekranında ve boş web sekmesinde "Gemini" düğmesi gemini.google.com'u açıyor, giriş kalıcı.
+
 ## Dosyalara eriş (ajan)
 - [ ] "Klasör seç" sonrası panelde "Dosyalara eriş: açık" ve doğru klasör adları görünür; tıklayınca kapanır.
 - [ ] CLI ile "entropinin geçtiği tüm sayfaları bul": "📄 … okunuyor" / "🔎 … aranıyor" satırları çıkar, yanıtta [dosya.pdf s.N] etiketleri var.

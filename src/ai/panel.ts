@@ -988,7 +988,7 @@ function settingsView(): HTMLElement {
     const cli = p.protocol === "cli";
     baseField.hidden = keyField.hidden = cli;
     fetchBtn.textContent = cli ? "Seçenekler" : "Modelleri getir";
-    modelHint.textContent = cli ? "sonnet, opus ya da haiku yaz (ya da tam model adı); boş bırakırsan Claude Code'un varsayılanı kullanılır." : modelHintText;
+    modelHint.textContent = p.modelHint ?? (cli ? "sonnet, opus ya da haiku yaz (ya da tam model adı); boş bırakırsan Claude Code'un varsayılanı kullanılır." : modelHintText);
     syncProto();
   };
   const syncProto = () => {
@@ -1226,6 +1226,7 @@ export function initAi(h: AiHost): void {
     folder: () => host.folder?.() ?? null, docs: () => host.docs?.() ?? [], current: () => host.current(),
     converted: () => host.converted?.() ?? [],
     openAt: (path, page) => host.openAt?.(path, page), isCli: () => currentConfig(settings).protocol === "cli",
+    cliKind: () => (presetOf(settings.preset).id === "gemini-cli" ? "gemini" : "claude"),
     query: (take) => {
       if (target) return target.query(take);
       const q = input.value;

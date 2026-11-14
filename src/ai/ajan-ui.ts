@@ -23,8 +23,10 @@ export interface AjanHost {
   current(): { path: string; name: string; view: PdfView; pdf?: string } | null;
   /** Dosyayı açar (açıksa öne getirir) ve sayfaya gider */
   openAt(path: string, page: number): void;
-  /** Etkin sağlayıcı Claude Code CLI mi */
+  /** Etkin sağlayıcı bir CLI mi (Claude Code ya da Gemini CLI) */
   isCli(): boolean;
+  /** Hangi CLI (araç adları farklı); yoksa Claude */
+  cliKind?(): "claude" | "gemini";
   /** Soru kutusundaki metin; take: true ise kutuyu boşaltır */
   query(take: boolean): string;
   /** Etkin konuşmaya soru gönderir */
@@ -172,6 +174,7 @@ export function agentSystem(system: string): string {
   const cur = host.current();
   const pptx = files.filter((f) => /\.pptx$/i.test(f.name) && !f.read);
   return system + agentNote({
+    cli: host.cliKind?.() ?? "claude",
     roots,
     doc: cur ? { path: cur.path, name: cur.name, page: cur.view.page, pages: cur.view.pageCount, pdf: cur.pdf } : null,
     converted: host.converted(),

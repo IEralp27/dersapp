@@ -36,11 +36,20 @@ Yapay zeka ayarlarında "Claude Code CLI (abonelik)" sağlayıcısını seç. Ge
 (PowerShell: `irm https://claude.ai/install.ps1 | iex`), bir terminalde `claude` yazıp `/login` ile giriş yapılmış olmalı.
 DersApp `claude -p` sürecini başlatıp yanıtı panele akıtır. `claude -p` kullanımı aboneliğin ayrı aylık "Agent SDK kredisi"nden düşer.
 
+## Gemini CLI (abonelik)
+
+"Gemini CLI (abonelik)" sağlayıcısı kurulu `gemini` komutunu (`npm install -g @google/gemini-cli`) onun kayıtlı girişiyle çalıştırır
+(`gemini -o stream-json -p ""`, istem stdin, talimat `GEMINI_SYSTEM_MD`, görüntü `@"yol"`). Dikkat: 18 Haziran 2026'dan beri Google girişi
+yalnızca Gemini Code Assist Standard/Enterprise'ta çalışır; ücretsiz ve Google AI Pro/Ultra Antigravity CLI'ya taşındı, AI Plus desteklenmez.
+Kişisel kullanımda ücretli `GEMINI_API_KEY` (`~/.gemini/.env`) gerekir. Aboneliği doğrudan kullanmak için karşılama ekranında ya da boş web
+sekmesinde "Gemini" düğmesi gemini.google.com'u açar.
+
 ## Dosyalara eriş (yapay zeka klasörü kendisi okur)
 
 Dosyalar panelinde "Klasör seç" yapınca yapay zeka panelinde "Dosyalara eriş: açık" görünür (tıklayınca kapanır).
 Erişim yalnızca okumadır ve şu klasörlerle sınırlıdır: çalışma klasörü, açık PDF'lerin klasörleri, uygulama çıktıları (`dersler/`).
 - **Claude Code CLI:** yapay zeka PDF'leri ve notları kendisi açar, arar (Read/Glob/Grep; yazma, komut, ağ yok). Panelde "📄 … okunuyor" satırları görünür.
+- **Gemini CLI:** aynısı read_file/glob/grep_search/list_directory ile (politika dosyası diğer her aracı ve MCP'yi reddeder; kökler `--include-directories`). read_file PDF'i bütün okur (sayfa aralığı yok); tur sınırı bayrağı yok.
 - **API anahtarlı sağlayıcılar:** soruyu kutuya yaz, "Klasörde ara"ya bas: klasördeki PDF/.md metinlerinde en uygun yerler bulunup soruya eklenir (metin önbelleği veri klasöründe `ajan-metin/`).
 - Yanıttaki `[dosya.pdf s.12]` etiketine tıklayınca o dosya o sayfada açılır.
 
@@ -91,7 +100,7 @@ Claude Desktop, Claude Code, Gemini CLI gibi uygulamalar DersApp'e bağlanıp a�
   - `draw.ts` çizim modeli (şekiller, geri al, silgi)
   - `select.ts` seç/taşı aracı
   - `calc.ts`, `calc-engine.ts` hesap makinesi (`node src/calc-engine.test.ts` ile test)
-  - `ai/` yapay zeka paneli; öğretme talimatı `ai/prompts.ts` içinde; sağlayıcılar `ai/providers.ts`, Claude Code CLI `ai/cli-run.ts` + `ai/cli-stream.ts`
+  - `ai/` yapay zeka paneli; öğretme talimatı `ai/prompts.ts` içinde; sağlayıcılar `ai/providers.ts`, Claude Code CLI `ai/cli-run.ts` + `ai/cli-stream.ts`, Gemini CLI `ai/gemini-run.ts` + `ai/gemini-stream.ts`
   - `ai/ai-tab.ts` yapay zeka sekmesi (tam sekme sohbet; akış/çizim panel.ts `chatAsk` ile ortak), `ai/sohbet.ts` konuşma kaydı + başlık (`node src/ai/sohbet.test.ts`)
   - `ai/ajan.ts` Dosyalara eriş saf mantığı (kökler, atıflar, arama; `node src/ai/ajan.test.ts`), `ai/ajan-ui.ts` panel satırı + dizin
   - `exams.ts` sınav takvimi
@@ -104,7 +113,7 @@ Claude Desktop, Claude Code, Gemini CLI gibi uygulamalar DersApp'e bağlanıp a�
 - `mcp-server/` ayrı MCP sunucusu (`cargo build --release` ile derlenir)
 - `src-tauri/` Rust tarafı
   - `src/store.rs` dosya okuma, klasör listeleme, ayar ve not kaydı
-  - `src/cli.rs` Claude Code CLI sürecini başlatma/durdurma
+  - `src/cli.rs` Claude Code / Gemini CLI sürecini başlatma/durdurma (ortak tesisat, `claude_args`/`gemini_args`)
   - `src/ajan.rs` Dosyalara eriş: kök doğrulama (sembolik bağ kaçışı yok), dosya listesi/okuma, metin önbelleği
   - `src/piper.rs` Piper sesi: ilk kullanımda indirme (onaylı, doğrulamalı), metni WAV'a çevirme
   - `src/kayit.rs` kayıtlı ders dosyaları (`dersler/` klasörü)

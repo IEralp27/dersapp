@@ -9,8 +9,10 @@
 //  - OpenAI uyumlu: POST {base}/chat/completions, "Authorization: Bearer". Görüntü: image_url + data: URL.
 //    SSE: choices[0].delta.content, sonda "data: [DONE]".
 //  - Claude Code CLI ("cli"): fetch değil; Rust tarafı yerel `claude -p` sürecini başlatır (cli-run.ts, src-tauri/src/cli.rs).
+//  - Gemini CLI ("cli", hazır seçenek "gemini-cli"): aynı tesisat, `gemini -p` (gemini-run.ts, gemini-stream.ts).
 
 import { CLI_MODELS } from "./cli-stream";
+import { GEMINI_CLI_MODELS, GEMINI_PLAN_HELP } from "./gemini-stream";
 import type { CliAgent } from "./cli-run";
 
 export type Protocol = "anthropic" | "openai" | "cli";
@@ -26,6 +28,8 @@ export interface Preset {
   keyPage?: { name: string; url: string };
   /** Kurulum ekranında gösterilecek kısa not */
   note?: string;
+  /** Model alanının altındaki ipucu (yoksa protokolün varsayılanı) */
+  modelHint?: string;
 }
 
 export const PRESETS: Preset[] = [
@@ -41,6 +45,15 @@ export const PRESETS: Preset[] = [
       + "Kurulum (PowerShell): irm https://claude.ai/install.ps1 | iex — sonra terminalde `claude` yaz ve /login ile giriş yap. "
       + "Not: Haziran 2026'dan beri `claude -p` kullanımı normal abonelik sınırından değil, aboneliğin ayrı aylık "
       + "\"Agent SDK kredisi\"nden düşer. Model boş kalırsa Claude Code'un varsayılanı kullanılır.",
+  },
+  {
+    id: "gemini-cli", label: "Gemini CLI (abonelik)", protocol: "cli",
+    baseUrl: "", needsKey: false,
+    note: "API anahtarı alanı yok: bilgisayarında kurulu Gemini CLI'ı (gemini komutu) onun kayıtlı girişiyle kullanır "
+      + "(Google girişi ya da GEMINI_API_KEY). Kurulum: npm install -g @google/gemini-cli — sonra terminalde `gemini` yaz ve giriş yap. "
+      + GEMINI_PLAN_HELP + " Dosyalara eriş açıkken yalnızca okuma araçları (read_file, glob, grep_search, list_directory) "
+      + "çalışma klasörleriyle sınırlı açılır; yazma, komut ve MCP kapalıdır.",
+    modelHint: "auto, pro, flash, flash-lite ya da tam model adı (ör. gemini-2.5-pro) yaz; boş bırakırsan Gemini CLI'ın varsayılanı (auto) kullanılır.",
   },
   {
     id: "gemini", label: "Google Gemini", protocol: "openai",
@@ -319,8 +332,9 @@ export async function streamChat(o: StreamOptions): Promise<void> {
 /** Claude Code CLI: Tauri köprüsü yalnızca gerektiğinde yüklenir (node testleri etkilenmesin). */
 async function streamCli(o: StreamOptions): Promise<void> {
   const { runClaudeCli } = await import("./cli-run");
+  const run = o.presetId === "gemini-cli" ? (await import("./gemini-run")).runGeminiCli : runClaudeCli;
   try {
-    await runClaudeCli({ model: o.config.model, system: o.system, messages: o.messages, signal: o.signal, onText: o.onText, agent: o.agent });
+    await run({ model: o.config.model, system: o.system, messages: o.messages, signal: o.signal, onText: o.onText, agent: o.agent });
   } catch (e) {
     if ((e as Error)?.name === "AbortError" || e instanceof AiError) throw e;
     throw new AiError((e as Error)?.message ?? String(e));
@@ -422,7 +436,7 @@ export interface ModelInfo {
 
 /** Sağlayıcının model listesi ucundan modelleri çeker. */
 export async function listModels(presetId: string, c: ProviderConfig): Promise<ModelInfo[]> {
-  if (c.protocol === "cli") return CLI_MODELS.map((m) => ({ ...m, vision: true }));
+  if (c.protocol === "cli") return (presetId === "gemini-cli" ? GEMINI_CLI_MODELS : CLI_MODELS).map((m) => ({ ...m, vision: true }));
   const url = endpoint(c.baseUrl, c.protocol === "anthropic" ? "/models?limit=1000" : "/models");
   const res = await send(url, { headers: headersFor(c) }, presetId, c.baseUrl);
   let j: { data?: unknown[]; models?: unknown[] };

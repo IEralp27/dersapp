@@ -13,7 +13,7 @@ import { initMistakes } from "./ai/mistakes-ui";
 import { initToday } from "./ai/today-ui";
 import { initMcp } from "./mcp";
 import { initTextPlace } from "./text-place";
-import { NOTEBOOKLM_URL, hostLabel, isNotebookLm, normalizeInput } from "./web/url";
+import { GEMINI_URL, NOTEBOOKLM_URL, hostLabel, isNotebookLm, normalizeInput } from "./web/url";
 import { isOfficePath, isPptx, pptxCacheKey, progressText, stripExt } from "./office";
 import { initMedia, mediaStore, refreshMedia } from "./web/media-ui";
 import * as web from "./web/web-backend";
@@ -628,6 +628,10 @@ function initWeb(): void {
   $("btn-ai-tab").addEventListener("click", () => openAiTab());
   $("btn-welcome-ai").addEventListener("click", () => openAiTab());
   $("btn-welcome-web").addEventListener("click", () => openWebTab());
+  $("btn-welcome-gemini").addEventListener("click", () => openWebTab(GEMINI_URL));
+  $("btn-web-gemini").addEventListener("click", () => {
+    if (active?.web) void navigateWeb(active, GEMINI_URL);
+  });
   $("btn-web-nlm").addEventListener("click", () => {
     if (!active?.web) return;
     active.web.nlm = true;

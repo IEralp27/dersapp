@@ -25,7 +25,7 @@ export class CliError extends Error {
   }
 }
 
-export type CliErrorKind = "not-installed" | "auth" | "limit" | "overloaded" | "too-big" | "other";
+export type CliErrorKind = "not-installed" | "auth" | "plan" | "limit" | "overloaded" | "too-big" | "other";
 
 /** stdin sınırı 10 MB; payı bırakıyoruz. */
 export const PROMPT_MAX_BYTES = 9_500_000;
@@ -62,10 +62,10 @@ function imageNote(paths: string[]): string {
 
 /**
  * Konuşma geçmişini tek bir isteme dönüştürür (v1: oturum sürdürme yok).
- * imagePaths[i]: i. mesajın görüntülerinin diskteki mutlak yolları.
+ * imagePaths[i]: i. mesajın görüntülerinin diskteki mutlak yolları; `note` yolları metne çevirir (Gemini: @"yol").
  */
-export function flattenPrompt(messages: CliMessage[], imagePaths: string[][] = []): string {
-  const parts = messages.map((m, i) => ({ m, text: (m.text || "…") + imageNote(imagePaths[i] ?? []) }));
+export function flattenPrompt(messages: CliMessage[], imagePaths: string[][] = [], note: (paths: string[]) => string = imageNote): string {
+  const parts = messages.map((m, i) => ({ m, text: (m.text || "…") + note(imagePaths[i] ?? []) }));
   if (parts.length === 1 && parts[0].m.role === "user") return parts[0].text;
   const lastUser = parts.length - 1;
   const lines: string[] = [
