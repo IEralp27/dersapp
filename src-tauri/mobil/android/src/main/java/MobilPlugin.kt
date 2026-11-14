@@ -18,6 +18,7 @@ import android.provider.DocumentsContract
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import androidx.activity.result.ActivityResult
+import androidx.appcompat.app.AppCompatActivity
 import app.tauri.annotation.ActivityCallback
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
@@ -333,7 +334,7 @@ class MobilPlugin(private val activity: Activity) : Plugin(activity) {
     }
   }
 
-  override fun onDestroy() {
+  override fun onDestroy(activity: AppCompatActivity) {
     try {
       tts?.shutdown()
     } catch (e5: Exception) {

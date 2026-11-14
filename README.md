@@ -158,8 +158,11 @@ indirilir. Motor dosyası `src/ai/tts-piper.ts`; Rust testleri `src-tauri/src/pi
 İlk deneme sürümü; telefonda henüz hiç çalıştırılmadı.
 - **Kurulum:** GitHub › Actions › "Derle" › son çalışma › `dersapp-Android` çıktısını indir, içindeki `app-universal-debug.apk`'yı telefona at ve aç ("bilinmeyen kaynaklardan yükleme" izni gerekir). Yalnızca arm64 telefonlar (hemen hepsi). Hata ayıklama imzalı; sürüm değişince eskisini kaldırmak gerekebilir.
 - **Çalışan:** PDF ve .pptx açma (+ düğmesi; dosya uygulamaya kopyalanır, ☰ Dosyalar › Belgelerim'de kalır), okuma, iki parmakla yakınlaştırma, çizim (parmak/kalem; tek parmak çizer, kaydırmak için "Fare" aracı), beyaz tahta, hesap makinesi, test, API anahtarlı yapay zeka (Anthropic, OpenAI, Gemini, OpenRouter, Özel), bulut sesi.
-- **Bilerek yok:** Claude Code/Gemini CLI, Ollama, Piper, web sekmesi/NotebookLM, MCP, klasör seçme, sürükle-bırak, LibreOffice (.ppt/.odp). Kaydedilen PDF'ler (test, özet) belgeler klasörüne yazılır.
-- **Kod:** `src/platform.ts` (`isMobile`), `src/mobile.css`, Rust `src-tauri/src/mobile/` (yer tutucular), `import_doc`/`docs_dir` (lib.rs). Android projesi depoda yok; CI'da `tauri android init` ile üretilir.
+- **Klasör seç:** Android klasör seçicisi açılır; izin kalıcıdır, klasör açılışta yeniden listelenir (PDF ve .pptx, iki alt klasör düzeyine kadar). Açılan dosya uygulama içine kopyalanır (`klasor/`), çizim/not/test verileri bu kopyanın yoluna bağlı kalır. "Klasörde ara" klasörü de tarar (en çok 300 MB kopyalanır).
+- **Sesli okuma:** "Telefonun sesi (ücretsiz, çevrimdışı)": telefonun kendi Türkçe seslendiricisi (Google Konuşma Hizmetleri ya da üreticinin). Türkçe ses verisi yoksa telefon ayarlarında Metin okuma çıkışı › Ses verilerini yükle. Kayıtlı ders sesi de bununla üretilir.
+- **Bağlantılar:** yapay zeka yanıtındaki bağlantılar, "Gemini" ve "Site aç" telefonun tarayıcısında açılır.
+- **Bilerek yok:** Claude Code/Gemini CLI, Ollama, Piper, web sekmesi/NotebookLM, MCP, sürükle-bırak, LibreOffice (.ppt/.odp). Kaydedilen PDF'ler (test, özet) belgeler klasörüne yazılır.
+- **Kod:** `src/platform.ts` (`isMobile`), `src/mobile.css`, Rust `src-tauri/src/mobile/` (saf.rs klasör, ses.rs ses, yer tutucular), `src-tauri/src/klasor.rs`, yerel eklenti `src-tauri/mobil/` (Kotlin), `src/ai/tts-android.ts`. Android projesi depoda yok; CI'da `tauri android init` ile üretilir, eklenti derlemede otomatik eklenir.
 
 ## Kısayollar
 

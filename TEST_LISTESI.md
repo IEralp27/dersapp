@@ -12,7 +12,15 @@ APK: Actions › "Derle" › `dersapp-Android`. Telefonda bak:
 - [ ] Hesap makinesi altta açılıyor, klavye üstünü örtmüyor
 - [ ] Yapay zeka paneli tam ekran açılıp kapanıyor; API anahtarıyla anlat/test; klavye yazma alanını örtmüyor
 - [ ] Test sonucu PDF'i kaydet → belgeler klasörüne yazılıyor
-- [ ] Gizli olmalı: CLI sağlayıcıları, Ollama, web/Gemini/NotebookLM düğmeleri
+- [ ] Gizli olmalı: CLI sağlayıcıları, Ollama, NotebookLM düğmesi, Piper
+- [ ] ☰ › Klasör seç → Android klasör seçicisi; "Bu klasörü kullan" → PDF/.pptx'ler ve alt klasörler (2 düzey) listeleniyor; arama kutusu süzüyor
+- [ ] Klasördeki PDF açılıyor; çizim yap, uygulamayı kapat/aç → klasör yine listede, çizim duruyor
+- [ ] Klasördeki dosyayı bilgisayardan değiştir/yenisini ekle → listede görünüyor, açınca yeni hali geliyor
+- [ ] Yapay zeka paneli › "Klasörde ara" (API anahtarıyla) klasördeki dosyalarda buluyor
+- [ ] Sesli okuma: ilk okumada seçim kutusunda "Telefonun sesi" var; Türkçe okuyor; duraklat/devam, hız çalışıyor; ayarlarda Türkçe sesler listeleniyor
+- [ ] Türkçe ses verisi yoksa anlaşılır mesaj (ayarlar yolu) çıkıyor
+- [ ] Kayıtlı ders sesi "Telefonun sesi" ile üretiliyor
+- [ ] Yanıttaki bağlantı, "Gemini" ve "Site aç" telefonun tarayıcısında açılıyor
 
 ## Claude Code CLI (abonelik)
 - [ ] Ayarlarda "Claude Code CLI (abonelik)" seç, "Anlat"a bas: yanıt panele akar, hata yok.
