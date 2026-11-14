@@ -8,5 +8,10 @@ export default defineConfig({
     strictPort: true,
     watch: { ignored: ["**/src-tauri/**"] },
   },
-  build: { target: "esnext" },
+  build: {
+    target: "esnext",
+    // Android WebView tembel yüklenen parçaları (import()) getiremiyordu:
+    // her şeyi tek dosyada topla.
+    rollupOptions: { output: { inlineDynamicImports: true } },
+  },
 });

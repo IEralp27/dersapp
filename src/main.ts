@@ -257,7 +257,7 @@ async function presentationPdf(tab: Tab): Promise<Uint8Array> {
   } catch (e) {
     const why = `"${tab.name}" yerleşik dönüştürücüyle açılamadı: ${message(e)}`;
     if (info.libreoffice) toast(why, "error", { label: "LibreOffice ile birebir aç", run: () => reopenWithLo(tab) });
-    else toast(why + " LibreOffice kurulursa onunla açılabilir (libreoffice.org).");
+    else toast(document.documentElement.classList.contains("mobile") || /Android/i.test(navigator.userAgent) ? why : why + " LibreOffice kurulursa onunla açılabilir (libreoffice.org).");
     throw new ShownError(why);
   }
   tab.pdfPath = await backend.officeCachePut(key, pdf).catch((e) => {
