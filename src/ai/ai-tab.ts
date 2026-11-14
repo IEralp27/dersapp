@@ -10,6 +10,7 @@ import { systemWithProfile } from "./learner-ui";
 import { SYSTEM_PROMPT } from "./prompts";
 import { ttsDock } from "./tts";
 import { InkPad } from "../ink-pad";
+import { openLinkOnPhone } from "../web/web-backend";
 import { ConvStore, DEFAULT_TITLE, deriveTitle, docsContext, newConvId, titleOf } from "./sohbet";
 import type { DocContext } from "./sohbet";
 
@@ -156,6 +157,7 @@ export class AiTab {
       if (!a || !this.main.contains(a)) return;
       e.preventDefault();
       const href = a.getAttribute("href");
+      if (href && openLinkOnPhone(href, (m) => host.toast(m))) return; // telefon: tarayıcıda aç
       if (href) navigator.clipboard.writeText(href).then(() => host.toast("Bağlantı adresi panoya kopyalandı.", "info"), () => {});
     });
     bindCitations(this.el); // [dosya.pdf s.12] -> o PDF'i o sayfada aç

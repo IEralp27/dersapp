@@ -12,7 +12,15 @@ mod web;
 #[cfg(mobile)]
 mod mobile;
 #[cfg(mobile)]
-use mobile::{piper, web};
+use mobile::{piper, saf, ses, web};
+// Telefona özgü komutların masaüstü yer tutucuları (klasör seçme, telefonun seslendiricisi)
+#[cfg(desktop)]
+mod masaustu;
+#[cfg(desktop)]
+use masaustu::{saf, ses};
+// Telefonda seçilen klasörün yansısı için saf mantık (testleri masaüstünde de çalışır)
+#[cfg(any(mobile, test))]
+mod klasor;
 
 use std::path::PathBuf;
 use tauri::{ipc::Request, ipc::Response, AppHandle, Manager};
@@ -25,7 +33,11 @@ fn data_dir(app: &AppHandle) -> Result<PathBuf, String> {
 
 /// PDF'i ham bayt olarak arayüze gönderir (JSON'a çevirmeden, hızlı yol).
 #[tauri::command]
-async fn read_pdf(path: String) -> Result<Response, String> {
+async fn read_pdf(app: AppHandle, path: String) -> Result<Response, String> {
+    // Telefon: seçilen klasördeki dosyanın kopyası güncel değilse önce içerik çözücüyle okunur
+    #[cfg(mobile)]
+    mobile::saf::ensure(&app, &path).await?;
+    let _ = &app;
     store::read_pdf(&path).map(Response::new)
 }
 
@@ -76,7 +88,13 @@ fn percent_decode(s: &str) -> String {
 }
 
 #[tauri::command]
-async fn list_dir(path: String) -> Result<store::Listing, String> {
+async fn list_dir(app: AppHandle, path: String) -> Result<store::Listing, String> {
+    // Telefon: seçilen klasörün (Android klasör izni) listesi telefondan gelir
+    #[cfg(mobile)]
+    if let Some(l) = mobile::saf::list(&app, &path).await {
+        return l;
+    }
+    let _ = &app;
     store::list_dir(&path)
 }
 
@@ -168,7 +186,11 @@ pub fn run() {
     if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
         std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
     }
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // Telefon: yerel eklenti (Kotlin; klasör seçme/okuma, seslendirme, bağlantıyı tarayıcıda açma)
+    #[cfg(mobile)]
+    let builder = builder.plugin(tauri_plugin_mobil::init());
+    builder
         .plugin(tauri_plugin_dialog::init())
         .manage(cli::CliRuns::default())
         // Ana pencere kapanınca uygulama kapansın (Linux'ta açık kalan web pencereleri süreci yaşatmasın)
@@ -189,6 +211,7 @@ pub fn run() {
             ajan::ajan_roots, ajan::ajan_app_dir, ajan::ajan_files, ajan::ajan_read,
             ajan::ajan_cache_get, ajan::ajan_cache_put, ajan::ajan_slides_dir, ajan::ajan_slides_put,
             piper::piper_status, piper::piper_install, piper::piper_synthesize, piper::piper_remove,
+            saf::saf_pick, ses::android_tts_info, ses::android_tts_synth,
             web::web_open, web::web_bounds, web::web_nav, web::web_close, web::web_page_text,
             web::open_external, web::reveal_file, web::media_import, web::media_read
         ])

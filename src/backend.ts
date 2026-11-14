@@ -84,10 +84,16 @@ export async function pickPdfFiles(): Promise<PdfSource[]> {
   return list.map((path) => ({ path, name: baseName(path) }));
 }
 
+/** Uygulamanın kendi belgeler klasörü (telefonda + ile açılan dosyaların kopyaları). */
+export async function docsDir(): Promise<string> {
+  return invoke<string>("docs_dir");
+}
+
 export async function pickFolder(): Promise<string | null> {
   if (!inTauri) return null;
-  // Telefonda klasör seçilmez: uygulamanın belgeler klasörü (açılan dosyaların kopyaları) listelenir
-  if (isMobile) return invoke<string>("docs_dir");
+  // Telefon: Android klasör seçicisi (kalıcı okuma izni). Dönen yol uygulama içindeki yansıdır
+  // (src-tauri/src/mobile/saf.rs): liste telefondan gelir, dosya açılınca içerik çözücüyle kopyalanır.
+  if (isMobile) return invoke<string | null>("saf_pick");
   const { open } = await import("@tauri-apps/plugin-dialog");
   const picked = await open({ directory: true, title: "Ders klasörünü seç" });
   return typeof picked === "string" ? picked : null;

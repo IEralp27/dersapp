@@ -18,7 +18,7 @@ import {
 } from "./lesson-ui";
 import { ACTION_PROMPTS, FREE_QUESTION_HINT, SYSTEM_PROMPT, contextLine, webPagePrompt } from "./prompts";
 import { htmlToText, pageProblem } from "../web/html-text";
-import { webPageText } from "../web/web-backend";
+import { openLinkOnPhone, webPageText } from "../web/web-backend";
 import type { ActionId } from "./prompts";
 import {
   actionHint, attachMarks, clearMarks, initMarks, marksSettingField, pageRegion, rulerImage, setRegion, systemWithMarks, visibleText,
@@ -1218,6 +1218,7 @@ export function initAi(h: AiHost): void {
     if (!a || !mainEl.contains(a)) return;
     e.preventDefault();
     const href = a.getAttribute("href");
+    if (href && openLinkOnPhone(href, (m) => host.toast(m))) return; // telefon: tarayıcıda aç
     if (href) void copyText(href, "Bağlantı adresi panoya kopyalandı.");
   });
 

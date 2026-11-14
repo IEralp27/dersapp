@@ -2,6 +2,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { inTauri } from "../backend";
+import { isMobile } from "../platform";
 import type { FetchedPage } from "./html-text";
 
 export interface Rect {
@@ -67,6 +68,13 @@ export async function openExternal(url: string): Promise<void> {
     return;
   }
   await invoke("open_external", { url });
+}
+
+/** Telefon: web bağlantısını telefonun tarayıcısında açar (yerel eklenti, ACTION_VIEW). Açtıysa true. */
+export function openLinkOnPhone(href: string, onError: (message: string) => void): boolean {
+  if (!isMobile || !inTauri || !/^https?:\/\//i.test(href)) return false;
+  openExternal(href).catch((e) => onError(typeof e === "string" ? e : e instanceof Error ? e.message : "Bağlantı açılamadı."));
+  return true;
 }
 
 export async function revealFile(path: string): Promise<void> {

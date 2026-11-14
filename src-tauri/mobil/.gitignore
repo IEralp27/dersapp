@@ -1,0 +1,5 @@
+# Derleme sırasında üretilir (tauri-plugin): Tauri'nin Android API kopyası ve izin şemaları
+/android/.tauri
+/android/build
+/permissions
+/target

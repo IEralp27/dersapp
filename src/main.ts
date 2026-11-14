@@ -613,7 +613,19 @@ function onWebDownload(d: web.DownloadDone): void {
     : `Özet kaydedildi: ${d.path}. Bir PDF'e bağlamak için PDF'te kulaklık düğmesi → "Dosya ekle".`, "info");
 }
 
+/** Telefon: web sekmesi yok; site (Gemini, "Site aç") telefonun tarayıcısında açılır. */
+function phoneBrowser(url: string): void {
+  web.openExternal(url).catch((e) => toast(message(e)));
+}
+
 function initWeb(): void {
+  if (isMobile) {
+    $("btn-web").addEventListener("click", () => phoneBrowser("https://www.google.com/"));
+    $("btn-welcome-web").addEventListener("click", () => phoneBrowser("https://www.google.com/"));
+    $("btn-welcome-gemini").addEventListener("click", () => phoneBrowser(GEMINI_URL));
+    $("btn-web").title = "Telefonun tarayıcısını aç";
+    $("btn-welcome-gemini").title = "Gemini'yi telefonun tarayıcısında aç";
+  }
   const input = $<HTMLInputElement>("web-address");
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") goAddress();
@@ -634,11 +646,13 @@ function initWeb(): void {
     const url = active?.web?.url;
     if (url) web.openExternal(url).catch((e) => toast(message(e)));
   });
-  $("btn-web").addEventListener("click", () => openWebTab());
+  if (!isMobile) $("btn-web").addEventListener("click", () => openWebTab());
   $("btn-ai-tab").addEventListener("click", () => openAiTab());
   $("btn-welcome-ai").addEventListener("click", () => openAiTab());
-  $("btn-welcome-web").addEventListener("click", () => openWebTab());
-  $("btn-welcome-gemini").addEventListener("click", () => openWebTab(GEMINI_URL));
+  if (!isMobile) {
+    $("btn-welcome-web").addEventListener("click", () => openWebTab());
+    $("btn-welcome-gemini").addEventListener("click", () => openWebTab(GEMINI_URL));
+  }
   $("btn-web-gemini").addEventListener("click", () => {
     if (active?.web) void navigateWeb(active, GEMINI_URL);
   });
@@ -1122,11 +1136,11 @@ async function init(): Promise<void> {
   tools.size = saved.size;
   toggleSidebar(isMobile ? false : saved.sidebar);
   if (isMobile) {
-    // Telefonda klasör seçilmez: Dosyalar paneli uygulamanın belgeler klasörünü (açılan dosyaların kopyaları) gösterir
-    $("btn-folder").textContent = "Belgelerim";
-    $("btn-folder").title = "Uygulamaya kopyalanan PDF ve sunumlar";
-    $("side-empty").textContent = "Henüz dosya yok. + düğmesiyle bir PDF ya da sunum aç; uygulamaya kopyalanır ve burada listelenir.";
-    if (!saved.folder) saved.folder = await backend.pickFolder().catch(() => null);
+    // Telefon: "Klasör seç" Android klasör seçicisini açar (izin kalıcı, açılışta yeniden listelenir).
+    // Klasör seçilmediyse uygulamanın belgeler klasörü (+ ile açılan dosyaların kopyaları) listelenir.
+    $("btn-folder").title = "Telefondaki ders klasörünü seç (PDF ve .pptx; iki alt klasör düzeyine kadar)";
+    $("side-empty").textContent = "Henüz dosya yok. \"Klasör seç\" ile telefondaki ders klasörünü seç ya da + ile bir PDF/sunum aç.";
+    if (!saved.folder) saved.folder = await backend.docsDir().catch(() => null);
   }
   renderToolState();
 

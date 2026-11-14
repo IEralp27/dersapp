@@ -1,0 +1,17 @@
+# Telefon (Android) yerel eklentisi: Kotlin tarafı android/ altında (klasör seçme/okuma, seslendirme,
+# bağlantıyı tarayıcıda açma). Yalnızca Android'de bağımlılıktır (bkz. ../Cargo.toml); masaüstü derlemesine girmez.
+# `links` anahtarı Tauri'nin bu Android kitaplığını üretilen Gradle projesine eklemesi için gerekli
+# (tauri-build, DEP_TAURI_PLUGIN_MOBIL_ANDROID_LIBRARY_PATH değişkenini okur; `tauri android init` sonrası da çalışır).
+[package]
+name = "tauri-plugin-mobil"
+version = "0.1.0"
+edition = "2021"
+links = "tauri-plugin-mobil"
+publish = false
+
+[dependencies]
+tauri = { version = "2" }
+serde = "1"
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }

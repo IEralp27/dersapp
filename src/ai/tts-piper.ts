@@ -4,6 +4,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { inTauri } from "../backend";
+import { isMobile } from "../platform";
 import { BytesSpeaker } from "./tts-audio";
 import type { ClipProvider } from "./tts-audio";
 import { registerEngine } from "./tts-engine";
@@ -138,7 +139,8 @@ const provider: ClipProvider = {
   },
 };
 
-registerEngine({
+// Telefonda Piper programı çalışmaz (masaüstü ikilisi); orada "Telefonun sesi" motoru var (tts-android.ts)
+if (!isMobile) registerEngine({
   id: "piper",
   order: 5,
   name: "Piper (ücretsiz, çevrimdışı, doğal)",

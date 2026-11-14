@@ -1,6 +1,6 @@
 //! Telefon (Android/iOS) için web sekmesi yer tutucuları. Masaüstündeki `web.rs` çoklu webview
 //! (Tauri "unstable", `Window::add_child`) ve masaüstü pencereleri kullanır; telefonda bunlar yok.
-//! Komut adları aynı kalır ki `generate_handler!` listesi iki platformda da değişmesin.
+//! `open_external` telefonda bağlantıyı tarayıcıda açar (yerel eklenti). Komut adları aynı kalır ki `generate_handler!` listesi iki platformda da değişmesin.
 
 use tauri::AppHandle;
 
@@ -31,9 +31,18 @@ pub async fn web_page_text(_app: AppHandle, _label: String) -> Result<(), String
     Err(YOK.into())
 }
 
+/// Bağlantıyı telefonun tarayıcısında açar (Android ACTION_VIEW, yerel eklenti).
 #[tauri::command]
-pub async fn open_external(_url: String) -> Result<(), String> {
-    Err(YOK.into())
+pub async fn open_external(app: AppHandle, url: String) -> Result<(), String> {
+    let lower = url.to_ascii_lowercase();
+    if !(lower.starts_with("https://") || lower.starts_with("http://")) {
+        return Err("Yalnızca web adresleri (http/https) açılabilir.".into());
+    }
+    #[derive(serde::Serialize)]
+    struct Url {
+        url: String,
+    }
+    super::call::<serde_json::Value>(&app, "openUrl", Url { url }).await.map(|_| ())
 }
 
 #[tauri::command]

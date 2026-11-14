@@ -12,8 +12,9 @@ html.mobile body {
   overscroll-behavior: none;
 }
 
-/* Masaüstüne özgü düğmeler (web sekmesi, NotebookLM, medya, Gemini) */
-html.mobile :is(#btn-web, #btn-welcome-web, #btn-welcome-gemini, #btn-nlm, #btn-media, #web-controls),
+/* Masaüstüne özgü düğmeler (NotebookLM, medya, web sekmesi denetimleri). "Site aç" ve "Gemini" telefonda
+   tarayıcıyı açar (main.ts initWeb). */
+html.mobile :is(#btn-nlm, #btn-media, #web-controls),
 html.mobile #doc-controls .sep:last-of-type { display: none !important; }
 
 /* ---------------------------------------------------------------- Üst çubuk */

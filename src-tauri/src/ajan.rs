@@ -229,7 +229,11 @@ pub async fn ajan_slides_put(app: AppHandle, name: String, md: String) -> Result
 }
 
 #[tauri::command]
-pub async fn ajan_files(roots: Vec<String>) -> Result<Vec<FileEntry>, String> {
+pub async fn ajan_files(app: AppHandle, roots: Vec<String>) -> Result<Vec<FileEntry>, String> {
+    // Telefon: seçilen klasördeki dosyalar önce uygulama içindeki yansıya alınır (yalnızca eskiyenler kopyalanır)
+    #[cfg(mobile)]
+    crate::mobile::saf::sync_roots(&app, &roots).await;
+    let _ = &app;
     Ok(list_files(&canonical_roots(&roots).0))
 }
 

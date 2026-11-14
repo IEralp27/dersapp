@@ -146,7 +146,11 @@ fn office_abs(path: &str) -> Result<PathBuf, String> {
 }
 
 #[tauri::command]
-pub async fn office_info(path: String) -> Result<OfficeInfo, String> {
+pub async fn office_info(app: AppHandle, path: String) -> Result<OfficeInfo, String> {
+    // Telefon: seçilen klasördeki sunumun kopyası güncel değilse önce içerik çözücüyle okunur
+    #[cfg(mobile)]
+    crate::mobile::saf::ensure(&app, &path).await?;
+    let _ = &app;
     let abs = office_abs(&path)?;
     let size = std::fs::metadata(&abs).map(|m| m.len()).unwrap_or(0);
     Ok(OfficeInfo {
@@ -159,7 +163,10 @@ pub async fn office_info(path: String) -> Result<OfficeInfo, String> {
 
 /// Sunum dosyasının baytları (yerleşik dönüştürücü için).
 #[tauri::command]
-pub async fn office_read(path: String) -> Result<Response, String> {
+pub async fn office_read(app: AppHandle, path: String) -> Result<Response, String> {
+    #[cfg(mobile)]
+    crate::mobile::saf::ensure(&app, &path).await?;
+    let _ = &app;
     let abs = office_abs(&path)?;
     std::fs::read(&abs).map(Response::new).map_err(|e| format!("Sunum okunamadı: {e}"))
 }

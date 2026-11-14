@@ -18,6 +18,7 @@ import { getEngine, listEngines, registerEngine } from "./tts-engine";
 import type { Avail, EngineConfig, SpeakEvents, SpeakOpts, Speaker, TtsEngine, VoiceInfo } from "./tts-engine";
 import "./tts-cloud";
 import "./tts-piper";
+import "./tts-android";
 import { SYSTEM, chooseEngine, clampRate, needsChooser, parseSettings } from "./tts-settings";
 import type { TtsSettings } from "./tts-settings";
 import type { ClipProvider } from "./tts-audio";
