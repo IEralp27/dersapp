@@ -154,6 +154,13 @@ PDF'in dışındaki ekranlarda elle çözmek için: test soruları ve sonuç ekr
 Piper ücretsiz ve çevrimdışıdır; seçilince program ve Türkçe ses (yaklaşık 85 MB) onayınla bir kez veri klasörüne
 indirilir. Motor dosyası `src/ai/tts-piper.ts`; Rust testleri `src-tauri/src/piper.rs` içinde (`cargo test`).
 
+## Android (taslak)
+İlk deneme sürümü; telefonda henüz hiç çalıştırılmadı.
+- **Kurulum:** GitHub › Actions › "Derle" › son çalışma › `dersapp-Android` çıktısını indir, içindeki `app-universal-debug.apk`'yı telefona at ve aç ("bilinmeyen kaynaklardan yükleme" izni gerekir). Yalnızca arm64 telefonlar (hemen hepsi). Hata ayıklama imzalı; sürüm değişince eskisini kaldırmak gerekebilir.
+- **Çalışan:** PDF ve .pptx açma (+ düğmesi; dosya uygulamaya kopyalanır, ☰ Dosyalar › Belgelerim'de kalır), okuma, iki parmakla yakınlaştırma, çizim (parmak/kalem; tek parmak çizer, kaydırmak için "Fare" aracı), beyaz tahta, hesap makinesi, test, API anahtarlı yapay zeka (Anthropic, OpenAI, Gemini, OpenRouter, Özel), bulut sesi.
+- **Bilerek yok:** Claude Code/Gemini CLI, Ollama, Piper, web sekmesi/NotebookLM, MCP, klasör seçme, sürükle-bırak, LibreOffice (.ppt/.odp). Kaydedilen PDF'ler (test, özet) belgeler klasörüne yazılır.
+- **Kod:** `src/platform.ts` (`isMobile`), `src/mobile.css`, Rust `src-tauri/src/mobile/` (yer tutucular), `import_doc`/`docs_dir` (lib.rs). Android projesi depoda yok; CI'da `tauri android init` ile üretilir.
+
 ## Kısayollar
 
 | Tuş | İş |

@@ -2,6 +2,18 @@
 
 Her satırı dene, olursa işaretle. Olmazsa hata metnini/ekran görüntüsünü at.
 
+## Android (taslak)
+APK: Actions › "Derle" › `dersapp-Android`. Telefonda bak:
+- [ ] Uygulama açılıyor, çökmüyor; üst çubuk, sekmeler yatay kayıyor; çentik/alt çubuk içeriği örtmüyor
+- [ ] + ile PDF seç (Dosyalar uygulaması, Drive, İndirilenler) → açılıyor; ☰ Belgelerim'de görünüyor; uygulama kapanıp açılınca sekme geri geliyor
+- [ ] .pptx açılıyor (yerleşik dönüştürücü)
+- [ ] Tek parmak kaydırma, iki parmak yakınlaştırma (bırakınca net çiziliyor)
+- [ ] Kalem/fosforlu/silgi parmakla ve kalemle; geri al/ileri al; çizimler kalıcı
+- [ ] Hesap makinesi altta açılıyor, klavye üstünü örtmüyor
+- [ ] Yapay zeka paneli tam ekran açılıp kapanıyor; API anahtarıyla anlat/test; klavye yazma alanını örtmüyor
+- [ ] Test sonucu PDF'i kaydet → belgeler klasörüne yazılıyor
+- [ ] Gizli olmalı: CLI sağlayıcıları, Ollama, web/Gemini/NotebookLM düğmeleri
+
 ## Claude Code CLI (abonelik)
 - [ ] Ayarlarda "Claude Code CLI (abonelik)" seç, "Anlat"a bas: yanıt panele akar, hata yok.
 - [ ] Bunu yaparken siyah konsol penceresi açılmaz.
