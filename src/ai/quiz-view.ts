@@ -1,8 +1,11 @@
 // Yapay zeka testleri ve özet PDF'leri: panel girişi (form, ilerleme, geçmiş) + #stage üzerinde test görünümü.
 //
-// Akış: "Test hazırla" -> form (kaynak, soru sayısı, zorluk, tür) -> kaynak sayfaların görüntüleri modele gider ->
-// model JSON döndürür (akış halinde; ilerleme gösterilir, iptal edilebilir) -> toleranslı ayrıştırma + doğrulama
-// (bozuksa bir kez düzeltme istenir) -> test görünümü -> sonuç ekranı (konuya göre "tekrar et" özeti) -> geçmiş.
+// Akış: "Test hazırla" -> form (kapsam: bu sayfa / aralık / tüm belge / bölge; soru sayısı 3-40; zorluk; tür) ->
+// üretim planı (quiz-plan.ts: az sayfada görüntü, çok sayfada sayfa metni ya da Claude Code CLI ajanı belgeyi kendisi
+// okur; çok soru parça parça, "tekrar sorma" listesiyle) -> her parça akış halinde (ilerleme, iptal) -> toleranslı
+// ayrıştırma + doğrulama (bozuksa parça başına bir kez düzeltme) -> tekrarlar atılır -> "cevap sırıtıyor" denetimi
+// (en çok bir onarım isteği) -> şıklar karıştırılır, doğru şık dengelenir (quiz-quality.ts) -> test görünümü
+// (her soruda karalama alanı, ink-pad.ts) -> sonuç ekranı -> geçmiş.
 import type { PdfView } from "../viewer";
 import { savePdfAs } from "../backend";
 import type { PdfSource } from "../backend";
@@ -14,7 +17,7 @@ import type { QuizDifficulty, QuizKind } from "./prompts";
 import { AiError, currentConfig, missing, streamChat } from "./providers";
 import type { ChatImage, ChatMessage, Settings } from "./providers";
 import {
-  QuizParseError, answerText, correctText, countQuestionsSoFar, isAnswered, isCorrect, letter, parseQuiz,
+  QuizParseError, answerText, correctText, countQuestionsSoFar, isAnswered, isCorrect, letter, parseLoose, parseQuiz,
   scoreQuiz, wrongIds,
 } from "./quiz";
 import type { Question, Response, Score } from "./quiz";
@@ -24,9 +27,18 @@ import "./quiz.css";
 import { notesPlan } from "./notes";
 import { learnerQuizDone, learnerQuizHint } from "./learner-ui";
 import { addFromQuiz } from "./mistakes-ui";
+import { agentOptions, agentSystem, ajanReady, ajanSync } from "./ajan-ui";
+import {
+  COUNT_PRESETS, IMAGE_PAGES, MAX_COUNT, MIN_COUNT, PER_REQUEST, avoidList, chooseMode, clampCount, dedupeQuestions,
+  fitTexts, planQuizJobs,
+} from "./quiz-plan";
+import type { QuizJob, QuizMode } from "./quiz-plan";
+import { applyDistractorFixes, balanceQuiz, distractorRepairRequest, giveaways, hashSeed } from "./quiz-quality";
+import { InkPad } from "../ink-pad";
 
 export interface StudyHost {
-  current(): { path: string; name: string; view: PdfView } | null;
+  /** pdf: sunumsa önbellekteki dönüştürülmüş PDF (ajan onu okur) */
+  current(): { path: string; name: string; view: PdfView; pdf?: string } | null;
   toast(text: string, kind?: "error" | "info"): void;
   /** Panelin kök öğesi (form penceresi bunun içine açılır) */
   panel: HTMLElement;
@@ -38,6 +50,8 @@ export interface StudyHost {
   openSettings(): void;
   /** Bir üretim (test/özet) başlamadan önce (ör. ders modu duraklasın) */
   beforeJob?(what: string): void;
+  /** Karalamadaki çözümü "Çözümümü kontrol et" ile denetletir (problem: testteki soru) */
+  checkScratch?(canvas: HTMLCanvasElement, page: number, problem: string): void;
 }
 
 type Mode = "quiz" | "summary" | "history";
@@ -46,7 +60,8 @@ interface Form {
   source: "page" | "range" | "region" | "all";
   from: number;
   to: number;
-  count: 5 | 10 | 15;
+  /** 3-40 */
+  count: number;
   difficulty: QuizDifficulty;
   kind: QuizKind;
 }
@@ -125,7 +140,7 @@ function loadForm(): Form {
     const raw = localStorage.getItem(FORM_KEY);
     if (raw) {
       const s = JSON.parse(raw);
-      if ([5, 10, 15].includes(s.count)) f.count = s.count;
+      if (Number.isFinite(Number(s.count))) f.count = clampCount(s.count);
       if (["easy", "medium", "hard"].includes(s.difficulty)) f.difficulty = s.difficulty;
       if (["mc", "mixed"].includes(s.kind)) f.kind = s.kind;
     }
@@ -264,10 +279,10 @@ function showMode(mode: Mode): void {
   if (mode === "quiz" && pend) f.source = "region";
   const { body } = card("", mode);
 
-  // Kaynak
+  // Kapsam
   const pc = cur.view.pageCount;
   const src = el("fieldset", "qz-field");
-  src.append(el("legend", "", "Kaynak"));
+  src.append(el("legend", "", mode === "quiz" ? "Kapsam" : "Kaynak"));
   const radio = (value: Form["source"], label: string | Node, disabled = false) => {
     const l = el("label", "qz-radio");
     const r = el("input");
@@ -300,7 +315,7 @@ function showMode(mode: Mode): void {
   const range = el("span", "qz-range");
   range.append("Sayfa aralığı ", fromIn, " – ", toIn);
   src.append(radio("page", `Bu sayfa (s. ${cur.view.page})`), radio("range", range));
-  if (mode === "summary") src.append(radio("all", `Tüm belge (${pc} sayfa)`));
+  src.append(radio("all", `Tüm belge (${pc} sayfa)`));
   if (mode === "quiz") {
     src.append(radio("region", pend ? `Panele eklenen bölge (s. ${pend.page})` : "Panele eklenen bölge (önce C ile bir bölge seç)", !pend));
   }
@@ -320,20 +335,43 @@ function showMode(mode: Mode): void {
     for (const [v, label] of values) row.append(btn(label, "qz-seg-btn", () => {
       set(v);
       paint();
+      sync();
     }));
     fs.append(row);
     if (hint) fs.append(note);
     paint();
-    return fs;
+    return { fs, row, paint };
   };
 
   if (mode === "quiz") {
+    // Soru sayısı: hızlı seçimler + serbest sayı (3-40)
+    const countIn = el("input", "qz-num qz-count");
+    countIn.type = "number";
+    countIn.min = String(MIN_COUNT);
+    countIn.max = String(MAX_COUNT);
+    countIn.value = String(f.count);
+    countIn.title = `${MIN_COUNT}-${MAX_COUNT} arası bir sayı yaz`;
+    countIn.setAttribute("aria-label", "Soru sayısı");
+    const counts = seg("Soru sayısı", COUNT_PRESETS.map((n) => [n, String(n)] as [number, string]), () => f.count, (v) => {
+      f.count = v;
+      countIn.value = String(v);
+    });
+    countIn.addEventListener("input", () => {
+      if (countIn.value.trim() === "") return;
+      f.count = clampCount(countIn.value);
+      counts.paint();
+      sync();
+    });
+    countIn.addEventListener("change", () => (countIn.value = String(f.count)));
+    const free = el("label", "qz-count-row");
+    free.append("ya da yaz: ", countIn, ` (${MIN_COUNT}-${MAX_COUNT})`);
+    counts.fs.insertBefore(free, counts.row.nextSibling);
     body.append(
-      seg("Soru sayısı", [[5, "5"], [10, "10"], [15, "15"]], () => f.count, (v) => (f.count = v)),
+      counts.fs,
       seg("Zorluk", [["easy", "Kolay"], ["medium", "Orta"], ["hard", "Zor"]], () => f.difficulty, (v) => (f.difficulty = v),
-        () => DIFF_HINT[f.difficulty]),
+        () => DIFF_HINT[f.difficulty]).fs,
       seg("Soru türü", [["mc", "Çoktan seçmeli"], ["mixed", "Karışık"]], () => f.kind, (v) => (f.kind = v),
-        () => (f.kind === "mixed" ? "Çoktan seçmeli + doğru/yanlış + sayısal cevap." : "Her soruda 4 şık.")),
+        () => (f.kind === "mixed" ? "Çoktan seçmeli + doğru/yanlış + sayısal cevap." : "Her soruda 4 şık.")).fs,
     );
   } else {
     body.append(el("p", "qz-hint", "Yapay zeka seçtiğin sayfaların yazdırılabilir özetini yazar: başlıklar, önemli formüller, "
@@ -342,6 +380,7 @@ function showMode(mode: Mode): void {
   }
 
   const go = btn(mode === "quiz" ? "Testi hazırla" : "Özet PDF'ini oluştur", "qz-btn primary wide", () => {
+    if (job) return; // çift tıklama: ikinci üretim başlamasın
     const pages = pickPages();
     if (!pages) return;
     if (mode === "quiz") saveForm(f);
@@ -353,28 +392,40 @@ function showMode(mode: Mode): void {
   function pickPages(): number[] | null {
     if (f.source === "page") return [cur!.view.page];
     if (f.source === "region") return pend ? [pend.page] : null;
-    if (f.source === "all") return Array.from({ length: pc }, (_, i) => i + 1);
+    if (f.source === "all") return range1(1, pc);
     const a = Math.round(Number(fromIn.value)), b = Math.round(Number(toIn.value));
     if (!(a >= 1 && b >= a && b <= pc)) return null;
-    if (b - a + 1 > MAX_PAGES && mode !== "summary") return null;
-    return Array.from({ length: b - a + 1 }, (_, i) => a + i);
+    return range1(a, b);
+  }
+
+  /** Testte kapsamın nasıl gönderileceği (görüntü / metin / ajan) ve istek sayısı */
+  function quizPlanNote(pages: number[]): string {
+    const m = chooseMode(pages.length, ajanReady());
+    const jobs = planQuizJobs({ pages, count: f.count, mode: m, textLens: new Map(pages.map((p) => [p, 2000])) });
+    const how = m === "image" ? `${pages.length} sayfanın görüntüsü gönderilecek`
+      : m === "agent" ? "Claude Code belgeyi kendisi okuyacak (Dosyalara eriş)"
+      : "sayfa metinleri gönderilecek (metni olmayan sayfaların bir kısmı görüntüyle)";
+    return `${how}; ${f.count} soru, yaklaşık ${jobs.length} istek${jobs.length > 1 ? " (parça parça, tekrar eden sorular ayıklanır)" : ""}.`;
   }
 
   function sync(): void {
     const a = Math.round(Number(fromIn.value)), b = Math.round(Number(toIn.value));
+    const pages = pickPages();
     let note = "";
-    if (f.source === "range") {
-      if (!(a >= 1 && b <= pc)) note = `Sayfalar 1 ile ${pc} arasında olmalı.`;
-      else if (b < a) note = "Bitiş sayfası başlangıçtan küçük olamaz.";
-      else if (b - a + 1 > MAX_PAGES && mode !== "summary") note = `En çok ${MAX_PAGES} sayfa seçebilirsin (şu an ${b - a + 1}).`;
-      else if (b - a + 1 > MAX_PAGES) note = notesPlan(range1(a, b)).text;
-      else note = `${b - a + 1} sayfa modele gönderilecek (1 istek).`;
-    } else if (f.source === "all") {
-      note = pc > MAX_PAGES ? notesPlan(range1(1, pc)).text : `${pc} sayfa modele gönderilecek (1 istek).`;
-    } else if (f.source === "region") note = "Yalnızca seçtiğin bölge gönderilir.";
+    if (f.source === "range" && !pages) {
+      note = !(a >= 1 && b <= pc) ? `Sayfalar 1 ile ${pc} arasında olmalı.` : "Bitiş sayfası başlangıçtan küçük olamaz.";
+    } else if (f.source === "region") {
+      note = mode === "quiz" ? `Yalnızca seçtiğin bölge gönderilir; ${f.count} soru.` : "Yalnızca seçtiğin bölge gönderilir.";
+    } else if (pages && mode === "quiz") {
+      note = quizPlanNote(pages);
+    } else if (pages && pages.length > MAX_PAGES) {
+      note = notesPlan(pages).text;
+    } else if (pages) {
+      note = `${pages.length} sayfa modele gönderilecek (1 istek).`;
+    }
     srcNote.textContent = note;
-    srcNote.classList.toggle("bad", f.source === "range" && !pickPages());
-    go.disabled = !pickPages();
+    srcNote.classList.toggle("bad", f.source === "range" && !pages);
+    go.disabled = !pages;
   }
   sync();
 }
@@ -393,6 +444,12 @@ export function studyCurrent(): ReturnType<StudyHost["current"]> {
 
 export function studyToast(text: string, kind?: "error" | "info"): void {
   host.toast(text, kind);
+}
+
+/** Hata defteri gibi başka ekranların karalamasını "Çözümümü kontrol et"e gönderir. */
+export function studyCheckScratch(canvas: HTMLCanvasElement, page: number, problem: string): void {
+  if (host?.checkScratch) host.checkScratch(canvas, page, problem);
+  else host?.toast("Çözüm kontrolü şu an kullanılamıyor.", "info");
 }
 
 export function dialogOpen(): boolean {
@@ -455,11 +512,13 @@ async function sourceImages(view: PdfView, pages: number[], region: boolean, p: 
   return { images, desc };
 }
 
-export async function collect(system: string, messages: ChatMessage[], signal: AbortSignal, onText: (all: string) => void): Promise<string> {
+export async function collect(
+  system: string, messages: ChatMessage[], signal: AbortSignal, onText: (all: string) => void, agent?: ReturnType<typeof agentOptions>,
+): Promise<string> {
   const s = host.settings();
   let text = "";
   await streamChat({
-    presetId: s.preset, config: currentConfig(s), system, messages, signal,
+    presetId: s.preset, config: currentConfig(s), system, messages, signal, agent,
     onText: (d) => {
       text += d;
       onText(text);
@@ -477,60 +536,200 @@ export function ready(): boolean {
   return true;
 }
 
+const aborted = (e: unknown) => (e as Error)?.name === "AbortError";
+
+/** Bir parçanın kaynak açıklaması ve görüntüleri (kipine göre). */
+async function jobSource(o: {
+  view: PdfView; job: QuizJob; mode: QuizMode; region: boolean; texts: Map<number, string>; file: string;
+  cache: Map<number, ChatImage>; signal: AbortSignal; onImage: (i: number, n: number) => void;
+}): Promise<{ images: ChatImage[]; desc: string }> {
+  const { job } = o;
+  if (o.region) {
+    const pend = host.pending();
+    if (!pend) throw new Error("Panele eklenen bölge bulunamadı.");
+    return { images: [pend.image], desc: `Görüntü, PDF'in ${pend.page}. sayfasından seçilmiş bir bölgedir. Bütün soruların "page" değeri ${pend.page} olsun.` };
+  }
+  const images: ChatImage[] = [];
+  for (let i = 0; i < job.images.length; i++) {
+    if (o.signal.aborted) throw new DOMException("İptal", "AbortError");
+    const pg = job.images[i];
+    let img = o.cache.get(pg);
+    if (!img) {
+      o.onImage(i, job.images.length);
+      img = toJpeg(await o.view.capturePage(pg, o.mode === "image" ? 1600 : 1200), o.mode === "image" ? 1600 : 1200);
+      o.cache.set(pg, img);
+    }
+    images.push(img);
+  }
+  const imgDesc = job.images.length === 1
+    ? `Görüntü, PDF'in ${job.images[0]}. sayfasıdır.`
+    : job.images.length ? `Görüntüler sırayla PDF'in şu sayfalarıdır: ${job.images.map((pg, i) => `${i + 1}. görüntü = sayfa ${pg}`).join(", ")}.` : "";
+  const a = job.pages[0], b = job.pages[job.pages.length - 1];
+  if (o.mode === "image") return { images, desc: imgDesc };
+  if (o.mode === "agent") {
+    return {
+      images: [],
+      desc: `Kaynak belge dosyası: "${o.file}". Bu istekte görüntü yok: Read aracıyla belgenin YALNIZCA ${a}-${b}. sayfalarını kendin oku `
+        + `(Read'in "pages" parametresiyle; bir okumada en çok 20 sayfa). Sorular yalnızca bu sayfalardan olsun; "page" değeri PDF'in gerçek sayfa numarası. `
+        + "Okuyamadığın sayfa olursa onu atla; dosya bulamazsan soru uydurma, boş questions dizisi döndür.",
+    };
+  }
+  const fitted = fitTexts(job.pages.map((pg) => o.texts.get(pg) ?? ""));
+  const blocks = job.pages.map((pg, i) => `--- SAYFA ${pg} ---\n${fitted[i] || (job.images.includes(pg) ? "(metin yok; görüntüsüne bak)" : "(metin yok)")}`);
+  return {
+    images,
+    desc: `Bu istekte PDF'in ${a}-${b}. sayfalarından çıkarılmış METİN var (formüller bozuk çıkmış olabilir: sembolleri mantıklı yorumla, `
+      + `emin olmadığın formülden soru sorma; "[…]" kısaltılmış yerdir).${imgDesc ? " Metni olmayan bazı sayfaların görüntüsü de var. " + imgDesc : ""} `
+      + `Her sorunun "page" değeri, dayandığı sayfanın numarası olsun.\n\n${blocks.join("\n\n")}`,
+  };
+}
+
+/** Bir parçayı üretir: akış + bozuksa bir kez düzeltme. Geçerli soru yoksa QuizParseError/AiError. */
+async function runJob(o: {
+  ask: ChatMessage; pages: number[]; count: number; signal: AbortSignal; system: string; agent: boolean;
+  progress: (n: number, fixing: boolean) => void;
+}): Promise<{ title: string; questions: Question[]; dropped: number }> {
+  const agentOpts = o.agent ? agentOptions(document.createElement("div")) : undefined;
+  let raw = await collect(o.system, [o.ask], o.signal, (all) => o.progress(Math.min(o.count, countQuestionsSoFar(all)), false), agentOpts);
+  if (!raw.trim()) throw new AiError("Model boş yanıt döndürdü. Başka bir model deneyebilirsin.");
+  let result: ReturnType<typeof parseQuiz> | null = null;
+  let problems: string[] = [];
+  try {
+    result = parseQuiz(raw, o.pages);
+    problems = result.problems;
+  } catch (e) {
+    if (!(e instanceof QuizParseError)) throw e;
+    problems = e.problems.length ? e.problems : [e.message];
+  }
+  // Bozuk ya da soruların çoğu geçersizse bir kez düzeltme iste
+  if (!result || result.quiz.questions.length < Math.ceil(o.count * 0.6)) {
+    o.progress(0, true);
+    const fix: ChatMessage = { role: "user", text: `${QUIZ_REPAIR_PROMPT}\n${problems.map((x) => "- " + x).join("\n")}` };
+    raw = await collect(o.system, [o.ask, { role: "assistant", text: raw }, fix], o.signal,
+      (all) => o.progress(Math.min(o.count, countQuestionsSoFar(all)), true), agentOpts);
+    try {
+      const again = parseQuiz(raw, o.pages);
+      if (!result || again.quiz.questions.length >= result.quiz.questions.length) result = again;
+    } catch (e) {
+      if (!(e instanceof QuizParseError)) throw e;
+      if (!result) throw e;
+    }
+  }
+  return { title: result.quiz.title, questions: result.quiz.questions.slice(0, o.count), dropped: result.problems.length };
+}
+
+/** "Cevap sırıtıyor" onarımı: en çok bir istek; başarısızsa sessizce olduğu gibi bırakır. */
+async function repairGiveaways(qs: Question[], signal: AbortSignal, p: Progress): Promise<Question[]> {
+  const flagged = qs.map((q, i) => [i, giveaways(q)] as [number, string[]]).filter(([, w]) => w.length).slice(0, 15);
+  if (!flagged.length) return qs;
+  p.set(`Ele veren şıklar düzeltiliyor (${flagged.length} soru)…`, 0.95);
+  try {
+    const raw = await collect(QUIZ_SYSTEM_PROMPT, [{ role: "user", text: distractorRepairRequest(qs, flagged) }], signal, () => {});
+    return applyDistractorFixes(qs, parseLoose(raw)).questions;
+  } catch (e) {
+    if (aborted(e)) throw e;
+    console.warn("Çeldirici onarımı atlandı", e);
+    return qs;
+  }
+}
+
 async function makeQuiz(f: Form, pages: number[]): Promise<void> {
   const cur = host.current();
-  if (!cur || !ready()) return;
+  if (!cur || job || !ready()) return;
   const ctrl = new AbortController();
   job = ctrl;
   const p = progressView("Test hazırlanıyor", () => ctrl.abort());
+  const count = clampCount(f.count);
   try {
     const region = f.source === "region";
-    const { images, desc } = await sourceImages(cur.view, pages, region, p, ctrl.signal);
-    const ask: ChatMessage = {
-      role: "user",
-      text: quizRequest({ count: f.count, difficulty: f.difficulty, kind: f.kind, pages: desc, name: cur.name }) + learnerQuizHint(),
-      images,
-    };
-    p.set("Yapay zeka soruları yazıyor…", 0.1);
-    const onText = (all: string) => {
-      const n = Math.min(f.count, countQuestionsSoFar(all));
-      p.set(n ? `Sorular yazılıyor: ${n} / ${f.count}` : "Yapay zeka soruları yazıyor…", 0.1 + 0.85 * (n / f.count));
-    };
-    let raw = await collect(QUIZ_SYSTEM_PROMPT, [ask], ctrl.signal, onText);
-    if (!raw.trim()) throw new AiError("Model boş yanıt döndürdü. Başka bir model deneyebilirsin.");
-    let result: ReturnType<typeof parseQuiz> | null = null;
-    let problems: string[] = [];
-    try {
-      result = parseQuiz(raw, pages);
-      problems = result.problems;
-    } catch (e) {
-      if (!(e instanceof QuizParseError)) throw e;
-      problems = e.problems.length ? e.problems : [e.message];
-    }
-    // Bozuk ya da soruların çoğu geçersizse bir kez düzeltme iste
-    if (!result || result.quiz.questions.length < Math.ceil(f.count * 0.6)) {
-      p.set("Yanıt bozuk geldi; yapay zekadan düzeltmesi isteniyor…", undefined);
-      const fix: ChatMessage = { role: "user", text: `${QUIZ_REPAIR_PROMPT}\n${problems.map((x) => "- " + x).join("\n")}` };
-      raw = await collect(QUIZ_SYSTEM_PROMPT, [ask, { role: "assistant", text: raw }, fix], ctrl.signal, (all) => {
-        const n = Math.min(f.count, countQuestionsSoFar(all));
-        p.set(`Düzeltilmiş test yazılıyor: ${n} / ${f.count}`, 0.1 + 0.85 * (n / f.count));
-      });
-      try {
-        result = parseQuiz(raw, pages);
-      } catch (e) {
-        if (!(e instanceof QuizParseError)) throw e;
-        throw new AiError("Yapay zeka iki denemede de okunabilir bir test üretemedi.\n\n"
-          + "Yeniden dene; sürerse daha güçlü bir model seç ya da daha az sayfa/soru iste. Ayrıntı: "
-          + (e.problems.filter((x) => !x.startsWith("JSON ayrıştırılamadı")).slice(0, 3).join(" ")
-            || "Yanıtın JSON biçimi bozuk ya da yanıt yarıda kesilmiş."));
+    if (!region && pages.length > IMAGE_PAGES) await ajanSync();
+    const mode: QuizMode = region ? "image" : chooseMode(pages.length, ajanReady());
+    // Metin kipi: sayfa metinleri (PDF.js) toplanır
+    const texts = new Map<number, string>();
+    if (mode === "text") {
+      for (let i = 0; i < pages.length; i++) {
+        if (ctrl.signal.aborted) throw new DOMException("İptal", "AbortError");
+        if (i % 5 === 0) p.set(`Sayfa metinleri okunuyor (${i + 1}/${pages.length})…`, (i / pages.length) * 0.1);
+        try {
+          texts.set(pages[i], await cur.view.docView.pageText(pages[i]));
+        } catch {
+          texts.set(pages[i], "");
+        }
       }
     }
-    if (result.problems.length) {
-      host.toast(`${result.problems.length} soru hatalı geldiği için testten çıkarıldı.`, "info");
+    const jobs = planQuizJobs({
+      pages, count, mode, textLens: new Map([...texts].map(([pg, t]) => [pg, t.trim().length])),
+    });
+    const system = mode === "agent" ? agentSystem(QUIZ_SYSTEM_PROMPT) : QUIZ_SYSTEM_PROMPT;
+    const cache = new Map<number, ChatImage>();
+    const file = cur.pdf ?? cur.path;
+    let all: Question[] = [];
+    let title = "";
+    let dropped = 0, failed = 0;
+    let lastError: unknown = null;
+    const work = [...jobs];
+    let topUp = false;
+    for (let k = 0; k < work.length; k++) {
+      const jb = work[k];
+      const before = all.length;
+      const where = jobs.length > 1 ? ` (parça ${Math.min(k + 1, jobs.length)}/${jobs.length})` : "";
+      const { images, desc } = await jobSource({
+        view: cur.view, job: jb, mode, region, texts, file, cache, signal: ctrl.signal,
+        onImage: (i, n) => p.set(`Sayfa görüntüleri hazırlanıyor (${i + 1}/${n})${where}…`, 0.1 * (before / count)),
+      });
+      const ask: ChatMessage = {
+        role: "user",
+        text: quizRequest({
+          count: jb.count, difficulty: f.difficulty, kind: f.kind, pages: desc, name: cur.name, avoid: avoidList(all),
+          part: jobs.length > 1 ? `${Math.min(k + 1, jobs.length)} / ${jobs.length}` : undefined,
+        }) + learnerQuizHint(),
+        images: images.length ? images : undefined,
+      };
+      p.set(`Yapay zeka soruları yazıyor${where}…`, 0.1 + 0.85 * (before / count));
+      try {
+        const r = await runJob({
+          ask, pages: jb.pages, count: jb.count, signal: ctrl.signal, system, agent: mode === "agent",
+          progress: (n, fixing) => p.set(
+            fixing ? `Yanıt bozuk geldi; düzeltilmiş hali yazılıyor${where}: ${n} / ${jb.count}` : `Sorular yazılıyor: ${before + n} / ${count}${where}`,
+            0.1 + 0.85 * ((before + n) / count)),
+        });
+        const d = dedupeQuestions(all, r.questions);
+        all = [...all, ...d.kept];
+        dropped += r.dropped + d.dropped;
+        title ||= r.title;
+      } catch (e) {
+        if (aborted(e) || (k === 0 && jobs.length === 1)) throw e;
+        failed++;
+        lastError = e;
+      }
+      // Son parçadan sonra eksik kaldıysa (bozuk/tekrar sorular) bir kez tamamlama isteği
+      if (k === work.length - 1 && !topUp && all.length < count && all.length > 0) {
+        topUp = true;
+        const need = Math.min(PER_REQUEST, count - all.length);
+        const base = jobs.reduce((a, b) => (b.count >= a.count ? b : a), jobs[0]);
+        work.push({ ...base, count: need });
+      }
+    }
+    if (!all.length) {
+      if (lastError instanceof QuizParseError) {
+        throw new AiError("Yapay zeka iki denemede de okunabilir bir test üretemedi.\n\n"
+          + "Yeniden dene; sürerse daha güçlü bir model seç ya da daha az sayfa/soru iste. Ayrıntı: "
+          + (lastError.problems.filter((x) => !x.startsWith("JSON ayrıştırılamadı")).slice(0, 3).join(" ")
+            || "Yanıtın JSON biçimi bozuk ya da yanıt yarıda kesilmiş."));
+      }
+      throw lastError ?? new AiError("Yapay zeka soru üretemedi.");
+    }
+    all = all.slice(0, count);
+    all = await repairGiveaways(all, ctrl.signal, p);
+    const id = newId();
+    all = balanceQuiz(all, hashSeed(id)); // şıkları karıştır, doğru şıkkın yerini dengele
+    if (dropped || failed || all.length < count) {
+      host.toast(`${all.length} soru hazırlandı (istenen ${count}). `
+        + (failed ? `${failed} parça üretilemedi. ` : "") + (dropped ? `${dropped} hatalı/tekrar eden soru çıkarıldı.` : ""), "info");
     }
     const saved: SavedQuiz = {
-      id: newId(), path: cur.path, name: cur.name, created: Date.now(), difficulty: f.difficulty, kind: f.kind,
-      pages, region, quiz: result.quiz, attempts: [],
+      id, path: cur.path, name: cur.name, created: Date.now(), difficulty: f.difficulty, kind: f.kind,
+      pages, region, quiz: { title: title || "Test", questions: all }, attempts: [],
     };
     if (!store.put(saved)) host.toast("Test geçmişe kaydedilemedi (depolama dolu). Yine de çözebilirsin.");
     job = null;
@@ -538,9 +737,13 @@ async function makeQuiz(f: Form, pages: number[]): Promise<void> {
     startSession(saved);
   } catch (e) {
     job = null;
-    if ((e as Error)?.name === "AbortError") {
+    if (aborted(e)) {
       closeDialog();
       host.toast("Test hazırlama iptal edildi.", "info");
+      return;
+    }
+    if (e instanceof QuizParseError) {
+      errorView("Test hazırlanamadı", "Yapay zeka iki denemede de okunabilir bir test üretemedi.\n\nYeniden dene; sürerse daha güçlü bir model seç ya da daha az sayfa/soru iste.", () => showMode("quiz"));
       return;
     }
     errorView("Test hazırlanamadı", e instanceof AiError ? e.message : "Beklenmeyen hata: " + errText(e), () => showMode("quiz"));
@@ -549,7 +752,7 @@ async function makeQuiz(f: Form, pages: number[]): Promise<void> {
 
 async function makeSummary(pages: number[]): Promise<void> {
   const cur = host.current();
-  if (!cur || !ready()) return;
+  if (!cur || job || !ready()) return;
   const ctrl = new AbortController();
   job = ctrl;
   const p = progressView("Özet hazırlanıyor", () => ctrl.abort());
@@ -674,6 +877,94 @@ let resume: HTMLElement | null = null;
 let session: Session | null = null;
 let timer = 0;
 
+// ------------------------------------------------------------ Karalama alanları (soru başına, test açıkken)
+
+/** Açık testin karalamaları: soru sırası -> karalama alanı (ink-pad.ts; beyaz tahta motoru). Diske yazılmaz. */
+let scratch: { id: string; pads: Map<number, InkPad> } | null = null;
+const SCRATCH_KEY = "dersapp.quiz.karalama";
+
+function scratchOpen(): boolean {
+  try {
+    return localStorage.getItem(SCRATCH_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+function setScratchOpen(on: boolean): void {
+  try {
+    localStorage.setItem(SCRATCH_KEY, on ? "1" : "0");
+  } catch {
+    // önemli değil
+  }
+}
+
+function disposeScratch(): void {
+  for (const pad of scratch?.pads.values() ?? []) pad.dispose();
+  scratch = null;
+}
+
+/** Sorunun karalama alanı; create=false ise yoksa null. Başka bir test açılınca eskiler silinir. */
+function padFor(saved: SavedQuiz, qi: number, create: boolean): InkPad | null {
+  if (scratch?.id !== saved.id) {
+    if (!create) return null;
+    disposeScratch();
+    scratch = { id: saved.id, pads: new Map() };
+  }
+  let pad = scratch.pads.get(qi) ?? null;
+  if (!pad && create) {
+    pad = new InkPad({ label: "Karalama: kalemle çöz (sayfa dolunca altına yenisi eklenir)", height: 300 });
+    scratch.pads.set(qi, pad);
+  }
+  return pad;
+}
+
+/** Soru metni + şıklar: "Çözümümü kontrol et"e problem olarak gider */
+function problemText(q: Question): string {
+  const opts = q.type === "mc" ? "\n" + q.options.map((o, i) => `${letter(i)}) ${o}`).join("\n") : "";
+  return `${q.prompt}${opts}${q.type === "num" && q.unit ? `\n(Birim: ${q.unit})` : ""}`;
+}
+
+async function checkPad(pad: InkPad, q: Question): Promise<void> {
+  const canvas = await pad.capture();
+  if (!canvas) return host.toast("Karalama boş: önce çözümünü kalemle yaz.", "info");
+  host.checkScratch?.(canvas, q.page, problemText(q));
+}
+
+/** Karalama bölümü (aç/kapa + alan + isteğe bağlı kontrol düğmesi) */
+function scratchSection(saved: SavedQuiz, qi: number, o: { open: boolean; remember: boolean; check: boolean }): HTMLElement {
+  const q = saved.quiz.questions[qi];
+  const box = el("div", "qz-scratch");
+  const head = el("div", "qz-scratch-head");
+  const body = el("div", "qz-scratch-body");
+  let open = o.open;
+  const toggle = btn("", "qz-btn small", () => {
+    open = !open;
+    if (o.remember) setScratchOpen(open);
+    paint();
+  });
+  const check = btn("Çözümümü kontrol et", "qz-btn small", () => {
+    const pad = padFor(saved, qi, false);
+    if (pad) void checkPad(pad, q);
+  });
+  check.title = "Karalamadaki çözümünde ilk hatalı satırı buldurur (yapay zeka paneli açılır); tam çözümü vermez.";
+  head.append(toggle);
+  if (o.check && host.checkScratch) head.append(check);
+  const paint = () => {
+    toggle.textContent = open ? "Karalamayı gizle" : "Karalama alanı (elle çöz)";
+    body.hidden = !open;
+    check.hidden = !open;
+    if (open) {
+      const pad = padFor(saved, qi, true)!;
+      if (!body.contains(pad.el)) pad.mount(body);
+      pad.focus();
+    }
+  };
+  box.append(head, body);
+  paint();
+  return box;
+}
+
 function stage(): HTMLElement {
   return document.getElementById("stage")!;
 }
@@ -700,6 +991,7 @@ function ensureView(): HTMLElement {
 function closeView(): void {
   clearInterval(timer);
   session = null;
+  disposeScratch();
   view?.remove();
   view = null;
   resume?.remove();
@@ -728,6 +1020,7 @@ function minimize(label: string): void {
 }
 
 function startSession(saved: SavedQuiz, ids?: number[]): void {
+  if (scratch && scratch.id !== saved.id) disposeScratch(); // aynı testi yeniden çözerken karalamalar kalır
   const all = saved.quiz.questions.map((_, i) => i);
   session = {
     saved, ids: ids ?? all, responses: saved.quiz.questions.map(() => null), at: 0, started: Date.now(),
@@ -748,6 +1041,8 @@ function startSession(saved: SavedQuiz, ids?: number[]): void {
  * Kaydedilemezse (depolama dolu) yine de açılır; false döner.
  */
 export function openExternalQuiz(saved: SavedQuiz): boolean {
+  // Dışarıdan gelen testte de doğru şık hep aynı yerde olmasın (henüz çözülmediyse karıştır)
+  if (!saved.attempts.length) saved.quiz.questions = balanceQuiz(saved.quiz.questions, hashSeed(saved.id));
   const ok = store.put(saved);
   if (!job) closeDialog(); // panelde hazırlanan test varsa yarıda kesme
   startSession(saved);
@@ -863,8 +1158,13 @@ function renderSolve(): void {
     row.append(input);
     if (q.unit) row.append(md(q.unit, "qz-md qz-unit"));
     box.append(row, el("p", "qz-hint", "Ondalık için virgül ya da nokta kullanabilirsin (2,5 ya da 2.5). Kesir de olur: 3/4."));
-    requestAnimationFrame(() => input.focus({ preventScroll: true }));
+    // Karalamaya çizerken odağı çalma: yalnızca odak testin dışındaysa ya da yeni soruya geçildiyse
+    requestAnimationFrame(() => {
+      if (!document.activeElement?.closest?.(".ink-pad")) input.focus({ preventScroll: true });
+    });
   }
+
+  box.append(scratchSection(s.saved, qi, { open: scratchOpen(), remember: true, check: false }));
 
   const foot = el("div", "qz-foot");
   const prev = btn("Önceki", "qz-btn", () => go(-1), ICON.left);
@@ -872,7 +1172,8 @@ function renderSolve(): void {
   const last = s.at === s.ids.length - 1;
   const nextB = last ? btn("Bitir", "qz-btn primary", () => tryFinish()) : btn("Sonraki", "qz-btn primary", () => next());
   if (!last) nextB.innerHTML += svg(ICON.right);
-  foot.append(prev, el("span", "qz-foot-mid", q.type === "mc" ? "Klavye: A-D ya da 1-4 ile seç, ← → ile gez" : q.type === "tf" ? "Klavye: D doğru, Y yanlış" : ""), nextB);
+  const n = q.options.length;
+  foot.append(prev, el("span", "qz-foot-mid", q.type === "mc" ? `Klavye: A-${letter(n - 1)} ya da 1-${n} ile seç, Enter sonraki, ← → gez` : q.type === "tf" ? "Klavye: D doğru, Y yanlış, Enter sonraki" : ""), nextB);
 
   const inner = el("div", "qz-inner");
   inner.append(prog, nav, box);
@@ -897,7 +1198,8 @@ function renderSolve(): void {
 }
 
 function go(d: number): void {
-  const s = session!;
+  const s = session;
+  if (!s) return;
   const k = s.at + d;
   if (k < 0 || k >= s.ids.length) return;
   s.at = k;
@@ -906,13 +1208,15 @@ function go(d: number): void {
 }
 
 function next(): void {
-  const s = session!;
+  const s = session;
+  if (!s) return;
   if (s.at < s.ids.length - 1) go(1);
   else tryFinish();
 }
 
 function tryFinish(): void {
-  const s = session!;
+  const s = session;
+  if (!s) return;
   const qs = s.saved.quiz.questions;
   if (s.ids.some((i) => !isAnswered(qs[i], s.responses[i])) && !s.confirm) {
     s.confirm = true;
@@ -923,7 +1227,9 @@ function tryFinish(): void {
 }
 
 function finish2(): void {
-  const s = session!;
+  const s = session;
+  if (!s) return; // çift gönderim (Bitir'e iki kez basma, Enter + tık): ikinci deneme kaydedilmesin
+  session = null;
   clearInterval(timer);
   const sc = scoreQuiz(s.saved.quiz, s.responses, s.ids);
   const attempt: Attempt = {
@@ -940,9 +1246,10 @@ function finish2(): void {
 }
 
 function onViewKey(e: KeyboardEvent): void {
-  if ((e.ctrlKey || e.metaKey) && ["j", "w", "tab"].includes(e.key.toLowerCase())) return; // uygulama kısayolları
-  e.stopPropagation();
+  if ((e.ctrlKey || e.metaKey) && ["j", "w", "tab", "z", "y"].includes(e.key.toLowerCase())) return; // uygulama kısayolları (geri al karalamaya gider)
   const t = e.target as HTMLElement;
+  if (t.closest?.(".ink-pad")) return; // karalama: çizim araç kısayolları (P, H, E…) uygulamaya gitsin
+  e.stopPropagation();
   if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) return;
   if (e.key === "Escape") {
     e.preventDefault();
@@ -956,15 +1263,21 @@ function onViewKey(e: KeyboardEvent): void {
   const k = e.key.toLowerCase();
   if (k === "arrowright") return go(1);
   if (k === "arrowleft") return go(-1);
+  if (k === "enter" && !(t instanceof HTMLButtonElement)) {
+    e.preventDefault();
+    return next();
+  }
   if (q.type === "mc") {
     let i = "abcdef".indexOf(k);
     if (i < 0 && /^[1-6]$/.test(k)) i = Number(k) - 1;
     if (i >= 0 && i < q.options.length) {
       s.responses[s.ids[s.at]] = i;
+      s.confirm = false;
       renderSolve();
     }
   } else if (q.type === "tf" && (k === "d" || k === "y")) {
     s.responses[s.ids[s.at]] = k === "d";
+    s.confirm = false;
     renderSolve();
   }
 }
@@ -1132,6 +1445,10 @@ function showResult(saved: SavedQuiz, attempt: Attempt): void {
       );
       item.append(row);
     }
+    // Karalama: testte çizdiysen burada görünür (düzenlenebilir); yanlışta "Çözümümü kontrol et"
+    const pad = padFor(saved, qi, false);
+    if (pad && !pad.empty) item.append(scratchSection(saved, qi, { open: !ok, remember: false, check: !ok }));
+    else if (!ok) item.append(scratchSection(saved, qi, { open: false, remember: false, check: true }));
     list.append(item);
   }
   inner.append(el("h3", "qz-section", "Soru soru"), list);

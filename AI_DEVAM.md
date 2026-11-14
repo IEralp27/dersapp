@@ -7,17 +7,17 @@ Ders çalışmaya odaklı masaüstü PDF okuyucu: "sohbet penceresi değil, PDF'
 - **Yığın:** Tauri 2 (Rust çekirdek) + Vite + sade TypeScript (framework yok). Arayüz web katmanında kalacak; kullanıcı Rust'ı seviyor ama saf Rust arayüze geçilmeyecek (karar verildi).
 - **Klasör:** `C:\Users\Eralp\Desktop\dev_app_learn\dersapp`
 - **Çalıştırma:** `npm install` → `npm run tauri dev`
-- **Testler:** `node src/<dosya>.test.ts` (Node 22, TS'i doğrudan çalıştırır). Hepsi geçiyordu: calc-engine, ai/quiz, quiz-store, ajan, srs, daily-plan, check, marks, sohbet, tts-text, tts-audio, tts-engine, tts-settings, lesson, notes, learner, cli-stream, gemini-stream, web/web, recording, nblm. `npm run build` temiz.
+- **Testler:** `node src/<dosya>.test.ts` (Node 22, TS'i doğrudan çalıştırır). Hepsi geçiyordu: calc-engine, ai/quiz, quiz-plan, quiz-quality, quiz-store, ajan, srs, daily-plan, check, marks, sohbet, tts-text, tts-audio, tts-engine, tts-settings, lesson, notes, learner, cli-stream, gemini-stream, web/web, recording, nblm. `npm run build` temiz.
 - Ayrıntılı dosya haritası ve kısayollar: `README.md`. MCP kurulumu: `docs/MCP.md`.
 
 ## Var olan özellikler
 - PDF okuyucu, sekmeler, dosyalar paneli, son açılanlar (kaldırılabilir)
-- Çizim araçları (kalem, fosforlu, şekiller, silgi, seç/taşı, metin), beyaz tahta (T), ekran görüntüsü (C)
+- Çizim araçları (kalem, fosforlu, şekiller, silgi, seç/taşı, metin), beyaz tahta (T), ekran görüntüsü (C); karalama alanı (`ink-pad.ts`, aynı motor) test sorularında, sonuç ekranında, hata defteri tekrarında ve AI sekmesinde
 - Gelişmiş hesap makinesi (Ctrl+K): karmaşık sayı, kutupsal, `par`, `roots`, türev/integral, önekler; "PDF'e taşı"
 - Sınav takvimi (üst çubuk rozeti, karşılama kartı)
-- Yapay zeka paneli (Ctrl+J; yana sabit ya da cam pencere): Anlat / Adım adım çöz / Beni sına, sayfayı anlat/özetle; kullanıcının kendi API anahtarı (Anthropic, OpenAI, Gemini, OpenRouter, Ollama, özel). Öğretme talimatı `src/ai/prompts.ts`
+- Yapay zeka paneli (Ctrl+J; yana sabit ya da cam pencere): Anlat / Adım adım çöz / Beni sına, sayfayı anlat (adım adım öğretir) / özetle (kısa sınav dökümü; ayrı istemler ve ipuçları); kullanıcının kendi API anahtarı (Anthropic, OpenAI, Gemini, OpenRouter, Ollama, özel). Öğretme talimatı `src/ai/prompts.ts`
 - Yapay zekanın sayfayı işaretleyerek anlatması (numaralı işaretler ↔ metindeki adımlar)
-- Etkileşimli test + sonuç ekranı, test/özet PDF'i üretimi
+- Etkileşimli test (kapsam: sayfa/aralık/tüm belge/bölge; 3-40 soru, parça parça; şık karıştırma + doğru şık dengesi; ele veren şık onarımı; soru başına karalama) + sonuç ekranı, test/özet PDF'i üretimi
 - Ders modu: PDF'i sayfa sayfa anlatma + kontrol sorusu; tüm PDF'ten ders notu PDF'i
 - Sesli anlatım (Alt+S): formülleri doğal Türkçe okur; seçilebilir motorlar (sistem sesi, Piper, OpenAI uyumlu bulut sesi). İlk okumada seçim kutusu (dinle + seç); seçim `tts-settings.ts`
 - Öğrenci profili (`ogrenci.md`, panelde "Profilim")
@@ -80,6 +80,18 @@ Kullanıcı hata çıktısı atarsa önce onu düzelt.
 - **Çözümümü kontrol et:** `check.ts` (istem + sonuç ayrıştırma; sonuç ikinci `dersapp-marks` bloğunda `{"kontrol": ...}`), panel.ts'te `checkSolution`/`checkPage` (ek kartında ve sayfa çiplerinde düğme). İşaretler mevcut `attachMarks` ile.
 - İstemler başka ajanın panel/prompts değişikliğiyle çakışmasın diye kendi dosyalarında (check.ts, daily-plan.ts).
 - Bakılacak: gerçek modelin satırı doğru kutulaması, el yazısı okuma, sınav adı ile dosya adı eşleşmesi (gerekirse kartta ders seçimi eklenir).
+
+## Test iyileştirme (14 Kasım, `claude/test-iyilestirme`, gerçek modelle denenmedi)
+Kullanıcı geri bildirimi: doğru şık hep B, cevap "sırıtıyor", soru sayısı az, yalnızca sayfa, testte çizim yok, anlat ≈ özetle.
+- **Şık dengesi (kodda):** `quiz-quality.ts` `balanceQuiz`: ayrıştırmadan sonra her mc sorunun şıkları tohumlu (test kimliği) karıştırılır, doğru şıkkın yeri test boyunca eşit dağılır. `rewriteLetterRefs` açıklamadaki "B şıkkı", "cevap B", "A ve C şıkları", satır başı "B)" atıflarını yeni harfe çevirir ("B alanı", "(A)" birimi değişmez). "Hepsi/Hiçbiri/A ve B" (`isAnchored`) sonda kalır; istemde de yasak, açıklamada harf yerine içerikle atıf istenir.
+- **Cevap sırıtıyor:** istem güçlendirildi (gerçek öğrenci hatası çeldiriciler, aynı uzunluk/biçim/birim/basamak, mutlak ifade yok). `giveaways()` belirlenimci denetim (belirgin en uzun, tek sayılı, tek birimli, mutlak ifadeler yalnızca çeldiricide); işaretli sorular için test başına EN ÇOK BİR onarım isteği (`distractorRepairRequest`/`applyDistractorFixes`), hata olursa sessizce atlanır.
+- **Soru sayısı ve kapsam:** formda 5/10/15/20/30/40 + serbest 3-40; kapsam bu sayfa / aralık (sınırsız) / tüm belge / bölge. `quiz-plan.ts`: <=8 sayfa görüntü; fazlası API'de sayfa metni (PDF.js, ~24k karakter/istek, metinsiz sayfalardan grup başına en çok 4 görüntü), Claude Code CLI + Dosyalara eriş'te ajan belgeyi Read ile okur (grup <=60 sayfa). İstek başına <=10 soru, sonraki isteğe "tekrar sorma" listesi, `dedupeQuestions` tekrarları atar, eksik kalırsa bir tamamlama isteği. Parça bozuksa parça başına bir düzeltme; tek parça başarısızsa diğerleriyle devam.
+- **Karalama:** `src/ink-pad.ts` = `PageView.board` (ikinci motor yok) + küçük araç çubuğu (kalem, fosforlu, silgi, seç, metin, 4 renk, geri al/ileri al/temizle). `main.ts` geri al/ileri al/temizle ve araç durumu `activePad()`'e (son dokunulan, görünen karalama) gider. Test: soru başına, test açıkken (aynı testi yeniden çözerken de) durur, sonuçta görünür; yanlışta "Çözümümü kontrol et" (panel.ts `checkScratch`, problem metniyle). Hata defteri kartında ve AI sekmesinde ("Karalama") de var. Diske yazılmaz.
+- **Çizim nerede yok (bilerek):** web sekmeleri (yerel webview, üstüne çizilemez); kayıtlı ders oynatıcısı (PDF'in üstünde yüzer pencere, PDF'e zaten çizilir); dönüştürülmüş sunumlar ve üretilen özet/ders notu PDF'leri zaten PDF sekmesi (çizim var); test PDF dışa aktarımı ve ayar/form pencereleri.
+- **Anlat ≠ özetle:** `explainPage` = öğretmen gibi adım adım + çözümlü örnek + işaret + kontrol sorusu; `summarizePage` = Konu/Tanımlar/Formüller/5-8 madde/Sınavda çıkabilir, soru ve işaret yok (işaret ipucu da eklenmez). Düğmelerde farklı ipuçları.
+- **Düzeltmeler:** çift "Bitir" ikinci deneme kaydetmiyor (hata defterine çift kart yok); "Testi hazırla"ya çift tıklama ikinci üretim başlatmıyor; klavyede Enter = sonraki, ipucu şık sayısına göre (A-D/1-4); klavyeyle seçim "boş soru" uyarısını kapatır; karalamadayken harf tuşları şık seçmiyor, Ctrl+Z karalamayı geri alıyor; sayısal soruda odak karalamadan çalınmıyor.
+- Başsız Chrome + sahte OpenAI sunucusuyla denendi: form (tüm belge, 12 soru; bu sayfa, 15 soru) -> 2 parça -> onarım -> dağılım dengeli (ör. A2 B2 C3 D2), açıklama harfleri doğru; kalem/fosforlu/geri al; soru değiştirince karalama kalıyor; çift Bitir -> 1 deneme; sonuçta "Çözümümü kontrol et" paneli açtı; AI sekmesi karalaması + Ctrl+Z.
+- **Doğrulanmadı:** gerçek modelin çeldirici kalitesi ve onarım yanıtı; ajan kipinde CLI'ın sayfa aralığını Read `pages` ile okuması; 300+ sayfada metin toplama süresi; taranmış PDF'de metin kipi; hata defteri karalaması (yalnızca derleme); dokunmatik kalem; karalama sonuçtan sonra uygulama kapanınca kaybolur (bilerek).
 
 ## Bilinen eksikler / sıradaki fikirler
 - **Yeni ses motorları (kullanıcı istedi):** Google Cloud TTS, Azure (Microsoft) ve ElevenLabs için birer motor dosyası (`src/ai/tts-<ad>.ts`, `registerEngine` + `BytesSpeaker`; adımlar `tts.ts` başındaki yorumda). Her birinin kendi anahtar alanı ayarlarda olsun. Şu an ayarlardan yalnızca OpenAI uyumlu servisler ("Özel" sağlayıcı) eklenebiliyor. Güncel API biçimlerini resmi dokümandan doğrula.

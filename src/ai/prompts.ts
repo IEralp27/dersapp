@@ -116,25 +116,38 @@ export const ACTION_PROMPTS = {
 
 Şimdi ilk soruyu sor. Sorudan önce uzun bir açıklama yapma.`,
 
-  /** "Bu sayfayı anlat": etkin sayfanın tamamı gönderilir. */
-  explainPage: `Bu, çalıştığım PDF'in bir sayfasının tamamı. Bu sayfayı bana anlat.
+  /**
+   * "Bu sayfayı anlat": etkin sayfanın tamamı gönderilir. ÖĞRETİR: tahtadaki öğretmen gibi adım adım, neden/nasıl,
+   * çözümlü küçük örnek, sayfada işaretler, sonda kontrol sorusu. (Özetle'den bilerek çok farklı.)
+   */
+  explainPage: `Bu, çalıştığım PDF'in bir sayfasının tamamı. Bu sayfayı bana tahtanın başındaki bir öğretmen gibi ÖĞRET.
 
-- Önce tek cümleyle sayfanın neyi anlattığını söyle.
-- Sonra sayfadaki ana fikirleri, sayfadaki sırayla, küçük parçalar halinde anlat.
-- Her yeni terimi gündelik dille tanımla; formüllerdeki her sembolün ne olduğunu söyle.
-- Sayfada örnek ya da soru varsa ne sorduğunu açıkla ama tamamını çözme.
+- İlk cümle: bu sayfada ne öğreneceğim ve bu neden işe yarar (gündelik dille, tek cümle).
+- Sonra sayfadaki fikirleri sayfadaki sırayla, numaralı küçük adımlarla öğret. Her adımda NE olduğunu, NEDEN öyle olduğunu ve NASIL kullanıldığını söyle; bir önceki adıma bağla.
+- Her yeni terimi gündelik dille tanımla; formüllerdeki her sembolün ne olduğunu ve birimini söyle. Formülün nereden geldiğini sezgisel olarak göster.
+- Sayılarla küçük, çözümlü bir örnek yap: her satırı ayrı yaz, her satırın yanında ne yaptığını söyle. Sayfada örnek varsa onu adım adım aç.
+- Anlatırken sayfada neye baktığımı göster: önemli formülleri, şekil parçalarını ve tabloyu işaretle (① ② ③).
 - Okunamayan ya da kesilmiş bir yer varsa söyle.
-- En sonda anlayıp anlamadığımı ölçen tek küçük soru sor, cevabını verme.`,
+- En sonda "**Kontrol sorusu:**" ile anlayıp anlamadığımı ölçen TEK kısa soru sor, cevabını verme.`,
 
-  /** "Bu sayfayı özetle": etkin sayfanın tamamı gönderilir. */
-  summarizePage: `Bu, çalıştığım PDF'in bir sayfasının tamamı. Bu sayfayı özetle.
+  /**
+   * "Bu sayfayı özetle": etkin sayfanın tamamı gönderilir. SINAVA YÖNELİK KISA DÖKÜM: tanımlar, formüller,
+   * 5-8 madde, "sınavda çıkabilir" satırları. Öğretmez, adım adım anlatmaz, kontrol sorusu sormaz.
+   */
+  summarizePage: `Bu, çalıştığım PDF'in bir sayfasının tamamı. Bu sayfanın sınav öncesi okunacak KISA özetini çıkar. Öğretme, adım adım anlatma: yalnızca hatırlatıcı döküm.
 
-- İlk satırda tek cümleyle: bu sayfa ne anlatıyor?
-- Sonra en önemli 3-7 noktayı madde madde yaz. Her madde tek, kısa cümle olsun.
-- Sayfadaki önemli formülleri LaTeX ile ayrıca listele ve her birinin yanına bir cümleyle ne işe yaradığını yaz.
-- Sınavda çıkabilecek bir nokta varsa "Dikkat:" diye belirt.
-- Sayfada olmayan bilgi ekleme. Okunamayan bir yer varsa söyle.
-- En sonda bu sayfayı anlayıp anlamadığımı ölçen tek küçük soru sor, cevabını verme.`,
+Biçim (bu sırayla, başka bölüm yok):
+1. Tek satır: "**Konu:** ..." (sayfanın konusu, en çok 12 kelime).
+2. "**Tanımlar**": sayfadaki önemli terimler, her biri tek satır "**terim**: kısa tanım". Terim yoksa bu bölümü yazma.
+3. "**Formüller**": sayfadaki her önemli formül ayrı satırda $$...$$; altında tek satır: semboller ve birimler. Formül yoksa bu bölümü yazma.
+4. "**Özet**": en az 5, en çok 8 madde; her madde tek kısa cümle, yeni bilgi (tanım ve formülleri tekrarlama).
+5. "**Sınavda çıkabilir**": 2-4 madde, her biri tek satır ("... sorulursa ... unutma", tipik tuzak, karıştırılan kavram).
+
+Kurallar:
+- Yalnızca sayfadakileri yaz; sayfada olmayan bilgi ekleme. Okunamayan yer varsa tek satırla söyle.
+- Örnek çözme, "neden" anlatma, benzetme yapma, uzun paragraf yazma. Toplam en çok 200 kelime (formüller hariç).
+- Kontrol sorusu SORMA (genel kuraldaki son soru kuralı bu istekte geçerli değil).
+- Sayfada işaret koyma; yalnızca bir formülün yeri gerçekten karışıksa en çok bir işaret.`,
 } as const;
 
 export type ActionId = keyof typeof ACTION_PROMPTS;
@@ -234,19 +247,24 @@ export const QUIZ_SYSTEM_PROMPT = `Sen DersApp içindeki sınav hazırlayıcıs�
 ## Soruların içeriği
 - Her soru yalnızca görüntülerde gerçekten olan içeriğe dayansın: oradaki tanımlar, formüller, şekiller, örnekler. Görüntüde olmayan konudan soru sorma.
 - Ezberi değil anlamayı ölç: "neden", "ne olur", "hangisi doğru yorumlanır", "hesapla" türü sorular. Sayfadaki bir cümleyi kelimesi kelimesine soran ya da yalnızca bir ismi hatırlamayı isteyen soru yazma.
-- Konuları sayfalara dengeli dağıt; aynı noktayı iki kez sorma.
+- Konuları sayfalara dengeli dağıt; aynı noktayı iki kez sorma. İstekte "tekrar sorma" listesi varsa o soruları ve aynı noktayı ölçen benzerlerini yazma.
 - Görüntüdeki gösterimi (semboller, birimler, harfler) aynen kullan.
 - Her sorunun soru metni tek başına anlaşılır olsun: gerekli tüm değerleri soruya yaz; "yukarıdaki şekil" gibi öğrencinin göremeyeceği bir şeye dayanma.
 
 ## Çeldiriciler (çoktan seçmeli)
 - Tam 4 şık yaz, yalnızca biri doğru.
-- Yanlış şıklar tipik öğrenci hatalarından gelsin: işaret hatası, birim hatası, formülü ters kullanma, bir adımı atlama, benzer bir kavramla karıştırma. Saçma ya da bariz yanlış şık yazma.
-- Şıkların uzunluğu ve biçimi birbirine benzesin; doğru şık en uzun ya da en ayrıntılı şık olarak öne çıkmasın. Doğru şıkkın yerini sorular arasında değiştir.
-- "Hepsi", "hiçbiri" gibi şıklar kullanma.
+- Her yanlış şık, bu konuda öğrencilerin GERÇEKTEN yaptığı bir hataya dayansın: işaret hatası, birim/önek hatası (ör. mili ↔ mikro), formülü ters kullanma, bir adımı atlama, yarıçap/çap ya da tepe/etkin değer karıştırma, benzer kavramla karıştırma. Konuyu bilmeyen biri şıklara bakarak doğruyu SEÇEMEMELİ.
+- Saçma, konu dışı ya da şakacı şık yazma.
+- Bütün şıklar aynı uzunlukta, aynı biçimde ve aynı kesinlikte olsun. Doğru şık en uzun, en ayrıntılı ya da tek "teknik" görünen şık OLMASIN; gerekirse çeldiricileri de aynı ayrıntıda yaz.
+- Sayısal şıklarda hepsi aynı birimle ve aynı anlamlı basamak sayısıyla yazılsın; birim varsa her şıkta olsun. Yalnızca doğru şıkta sayı ya da birim olmasın.
+- "Her zaman", "asla", "yalnızca", "kesinlikle" gibi ele veren ifadeleri yalnızca çeldiricilere koyma; doğru şıkka da "genellikle" gibi çekince koyup öne çıkarma.
+- "Hepsi", "hiçbiri", "A ve B" gibi başka şıklara dayanan şıklar YASAK.
+- Şıkların sırası önemli değil: uygulama şıkları karıştırır ve doğru şıkkın yerini kendisi dengeler.
 
 ## Açıklamalar
 - Her sorunun açıklaması adım adım olsun: numaralı kısa adımlar, her adımda NE yapıldığı ve NEDEN.
 - Çoktan seçmelide en sık seçilecek yanlış şıkkın neden yanlış olduğunu da bir cümleyle söyle.
+- Açıklamada ve soruda şıklara HARFLE değinme ("B şıkkı", "A ve C" yazma; şıklar karıştırılınca harfler değişir). Şıkka içeriğiyle değin: "$5$ V diyen şık", "\"akım artar\" şıkkı".
 - Kısa cümleler; "açıktır ki", "kolayca görülür" yasak.
 
 ## Matematik
@@ -292,7 +310,7 @@ Yanıtın YALNIZCA tek bir JSON nesnesi olsun: önünde ya da arkasında açıkl
   ]
 }
 - "options" şıkların yalnızca metnidir; başına "A)" gibi harf koyma. Şık harfleri sırayla A, B, C, D'dir.
-- "answer": çoktan seçmelide doğru şıkkın harfi; doğru/yanlışta true ya da false; sayısalda JSON sayısı (nokta ile, ör. 2.5).
+- "answer": çoktan seçmelide doğru şıkkın "options" içindeki harfi (A ilk şık); doğru/yanlışta true ya da false; sayısalda JSON sayısı (nokta ile, ör. 2.5).
 - "tolerance": sayısal cevapta kabul edilecek mutlak sapma (yuvarlama payı). Sonuç tam sayıysa 0 olabilir.
 - "unit": birim yoksa boş metin "".
 - "page": sorunun dayandığı sayfanın numarası (sana verilen sayfa numaralarından biri).
@@ -324,14 +342,19 @@ export const QUIZ_REPAIR_PROMPT = `Yanıtın geçerli bir test JSON'u değil ya 
 
 Bulunan sorunlar:`;
 
-/** Kullanıcı mesajı: test isteği. */
-export function quizRequest(o: { count: number; difficulty: QuizDifficulty; kind: QuizKind; pages: string; name: string }): string {
+/**
+ * Kullanıcı mesajı: test isteği. `pages`: kaynak açıklaması (görüntüler / sayfa metni / ajanın okuyacağı dosya);
+ * `avoid`: daha önceki parçalarda yazılan sorular (tekrar sorulmasın); `part`: parçalı üretimde "2 / 4".
+ */
+export function quizRequest(o: {
+  count: number; difficulty: QuizDifficulty; kind: QuizKind; pages: string; name: string; avoid?: string; part?: string;
+}): string {
   return `${o.pages}
-Belge: "${o.name.replace(/\.(pdf|pptx|ppt|odp)$/i, "")}"
+Belge: "${o.name.replace(/\.(pdf|pptx|ppt|odp)$/i, "")}"${o.part ? ` — test parça parça hazırlanıyor, bu istek: parça ${o.part}` : ""}
 
 Bu içerikten ${o.count} soruluk bir test hazırla.
 ${QUIZ_DIFFICULTY[o.difficulty]}
-${QUIZ_TYPE_RULES[o.kind]}
+${QUIZ_TYPE_RULES[o.kind]}${o.avoid ? `\n\n${o.avoid}` : ""}
 Yanıtın yalnızca şemaya uyan JSON olsun.`;
 }
 

@@ -475,13 +475,20 @@ const ACTION_LABELS: Record<ActionId, string> = {
   summarizePage: "Bu sayfayı özetle",
 };
 
+/** Sayfa düğmelerinin ipuçları: iki düğme bilerek farklı iş yapar (prompts.ts explainPage / summarizePage). */
+const ACTION_TIPS: Partial<Record<ActionId, string>> = {
+  explainPage: "Öğretmen gibi adım adım öğretir: neden/nasıl, çözümlü örnek, sayfada işaretler, sonda kontrol sorusu.",
+  summarizePage: "Sınav öncesi kısa döküm: tanımlar, formüller, 5-8 madde ve \"sınavda çıkabilir\" notları. Öğretmez.",
+  quiz: "Sohbette tek tek soru sorar. Puanlı test için aşağıdaki \"Test hazırla\".",
+};
+
 function runAction(id: ActionId, att: Attachment): void {
   const c = activeConv();
   if (!c) return;
   const cur = host.current()!;
   learnerAction(id, cur.name, att.page);
   void ask(c, {
-    text: `${ACTION_PROMPTS[id]}${id === "quiz" ? "" : actionHint()}\n\n${contextLine(cur.name, att.page)}`,
+    text: `${ACTION_PROMPTS[id]}${id === "quiz" || id === "summarizePage" ? "" : actionHint()}\n\n${contextLine(cur.name, att.page)}`,
     label: `${ACTION_LABELS[id]} · s. ${att.page}`,
     att,
   });
@@ -631,17 +638,38 @@ async function checkPage(): Promise<void> {
   await checkSolution({ image: rulerImage(canvas, toImage) ?? image, url, canvas, page, kind: "page", region });
 }
 
+/**
+ * Testteki/hata defterindeki karalama alanından (ink-pad.ts) gelen çözümü denetletir.
+ * `problem`: sorunun metni (görüntüde yalnızca öğrencinin çözümü var).
+ */
+function checkScratch(canvas: HTMLCanvasElement, page: number, problem: string): void {
+  const c = activeConv();
+  if (!c) return host.toast("Çözüm kontrolü için önce testin PDF'i açık olmalı.", "info");
+  if (c.busy) return host.toast("Yapay zeka şu an başka bir yanıt yazıyor; bitince yeniden dene.", "info");
+  if (missing(settings)) {
+    toggleAi(true);
+    return render();
+  }
+  settingsOpen = false;
+  toggleAi(true);
+  const { image, url } = toImage(canvas);
+  void checkSolution({ image, url, canvas, page, kind: "snip", region: null }, { problem });
+}
+
 /** İlk hatalı satırı buldurur (işaretler attachMarks ile çizilir); hata varsa "Hata defterine ekle" düğmesi ekler. */
-async function checkSolution(att: Attachment): Promise<void> {
+async function checkSolution(att: Attachment, scratch?: { problem: string }): Promise<void> {
   const c = activeConv();
   const cur = host.current();
   if (!c || !cur || c.busy) return;
-  const board = att.region?.board ?? cur.view.onBoard;
+  const board = scratch ? true : att.region?.board ?? cur.view.onBoard;
   learnerAction("solve", cur.name, att.page);
   const before = c.turns.length;
+  const problem = scratch
+    ? `\n\nGörüntü, test sorusunun yanındaki karalama alanıdır (problem metni görüntüde yok). Problem:\n${scratch.problem}`
+    : "";
   await ask(c, {
-    text: `${checkRequest(cur.name, att.page, board, marksEnabled())}\n\n${contextLine(cur.name, att.page)}`,
-    label: `${CHECK_LABEL} · ${board ? "tahta " : ""}s. ${att.page}`,
+    text: `${checkRequest(cur.name, att.page, board, marksEnabled())}${problem}\n\n${contextLine(cur.name, att.page)}`,
+    label: `${CHECK_LABEL} · ${scratch ? "karalama, " : board ? "tahta " : ""}s. ${att.page}`,
     att,
   });
   const bot = c.turns[c.turns.length - 1];
@@ -763,6 +791,7 @@ function renderCompose(c: Conv | null): void {
     const row = el("div", "ai-page-actions");
     for (const id of ["explainPage", "summarizePage"] as const) {
       const b = textBtn(ACTION_LABELS[id], "ai-chip", () => void pageAction(id));
+      b.title = ACTION_TIPS[id] ?? "";
       b.disabled = busy || noDoc;
       row.append(b);
     }
@@ -802,6 +831,7 @@ function renderWebCompose(busy: boolean): void {
   const row = el("div", "ai-page-actions");
   for (const id of ["explainPage", "summarizePage", "quiz"] as const) {
     const b = textBtn(webFetching && !busy ? "Sayfa alınıyor…" : ACTION_LABELS[id], "ai-chip", () => void webAction(id));
+    b.title = ACTION_TIPS[id] ?? "";
     b.disabled = busy || webFetching;
     row.append(b);
   }
@@ -1204,6 +1234,7 @@ export function initAi(h: AiHost): void {
     current: () => host.current(), toast: (t, k) => host.toast(t, k), panel, settings: () => settings,
     pending: () => activeConv()?.pending ?? null, openSettings, followUp,
     beforeJob: (what) => lessonInterrupt(what),
+    checkScratch, // karalamadaki çözümü kontrol et (test sonuç ekranı, hata defteri)
   });
   initLearner({
     current: () => host.current(), settings: () => settings, toast: (t, k) => host.toast(t, k),

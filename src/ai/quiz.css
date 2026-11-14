@@ -426,3 +426,13 @@ button.qz-option.on:hover:not(:disabled) { background: #3d7eff2b; }
 .qz-p-answer { font-weight: 600; color: #1f7a45; }
 .qz-p-mine { font-size: 12.5px; color: #59616c; margin-bottom: 4px; }
 .qz-p-key .qz-p-md { font-size: 13px; }
+
+/* Soru sayısı: serbest sayı */
+.qz-count-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12.5px; color: var(--dim); }
+.qz-count-row .qz-num { width: 64px; }
+
+/* Karalama alanı (ink-pad.ts): soruda ve sonuç ekranında */
+.qz-scratch { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.qz-scratch-head { display: flex; gap: 6px; flex-wrap: wrap; }
+.qz-scratch-body[hidden] { display: none; }
+.hd-card .qz-scratch, .ai-tab .qz-scratch { margin-top: 8px; }

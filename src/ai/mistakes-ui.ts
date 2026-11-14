@@ -11,6 +11,8 @@ import type { Card, Grade, NewCard } from "./srs";
 import type { Attempt, SavedQuiz } from "./quiz-store";
 import "./quiz.css";
 import "./mistakes.css";
+import { InkPad } from "../ink-pad";
+import { studyCheckScratch } from "./quiz-view";
 
 export interface MistakesHost {
   toast(text: string, kind?: "error" | "info"): void;
@@ -32,6 +34,8 @@ const listeners = new Set<() => void>();
 let view: HTMLElement | null = null;
 let resume: HTMLElement | null = null;
 let backupTimer = 0;
+/** Tekrar sırasında kart başına karalama alanı (ink-pad.ts); ekran kapanınca silinir */
+const pads = new Map<string, InkPad>();
 
 interface Session {
   queue: string[];
@@ -205,6 +209,8 @@ function ensureView(): HTMLElement {
 
 function closeView(): void {
   session = null;
+  for (const p of pads.values()) p.dispose();
+  pads.clear();
   view?.remove();
   view = null;
   resume?.remove();
@@ -283,7 +289,7 @@ function renderCard(): void {
       btn("Bildim (2)", "qz-btn primary hd-good", () => grade(c, "know")),
     );
   }
-  box.append(acts);
+  box.append(acts, cardScratch(c));
   const tools = el("div", "qz-row hd-tools");
   if (c.path) {
     tools.append(btn(c.page ? `Kaynağa git (s. ${c.page})` : "Kaynağı aç", "qz-btn small", () => {
@@ -304,6 +310,44 @@ function renderCard(): void {
   fill.style.width = `${Math.round((s.at / s.queue.length) * 100)}%`;
   bar.append(fill);
   show(`${s.at + 1} / ${s.queue.length}`, bar, box);
+}
+
+/** Kartta elle çözmek için karalama alanı; çizim varsa "Çözümümü kontrol et" */
+function cardScratch(c: Card): HTMLElement {
+  const box = el("div", "qz-scratch");
+  const head = el("div", "qz-scratch-head");
+  const body = el("div", "qz-scratch-body");
+  let open = pads.has(c.id);
+  const toggle = btn("", "qz-btn small", () => {
+    open = !open;
+    paint();
+  });
+  const check = btn("Çözümümü kontrol et", "qz-btn small", () => {
+    const pad = pads.get(c.id);
+    if (!pad) return;
+    void pad.capture().then((canvas) => {
+      if (!canvas) return host.toast("Karalama boş: önce çözümünü kalemle yaz.", "info");
+      studyCheckScratch(canvas, c.page || 1, c.question);
+    });
+  });
+  check.title = "Karalamadaki çözümünde ilk hatalı satırı buldurur; tam çözümü vermez.";
+  head.append(toggle, check);
+  const paint = () => {
+    toggle.textContent = open ? "Karalamayı gizle" : "Karalama alanı (elle çöz)";
+    body.hidden = !open;
+    check.hidden = !open;
+    if (!open) return;
+    let pad = pads.get(c.id);
+    if (!pad) {
+      pad = new InkPad({ label: "Karalama", height: 260 });
+      pads.set(c.id, pad);
+    }
+    if (!body.contains(pad.el)) pad.mount(body);
+    pad.focus();
+  };
+  box.append(head, body);
+  paint();
+  return box;
 }
 
 function grade(c: Card, g: Grade): void {
@@ -444,9 +488,10 @@ export function openAddForm(prefill: Partial<NewCard> = {}): void {
 }
 
 function onKey(e: KeyboardEvent): void {
-  if ((e.ctrlKey || e.metaKey) && ["j", "w", "tab"].includes(e.key.toLowerCase())) return;
-  e.stopPropagation();
+  if ((e.ctrlKey || e.metaKey) && ["j", "w", "tab", "z", "y"].includes(e.key.toLowerCase())) return;
   const t = e.target as HTMLElement;
+  if (t.closest?.(".ink-pad")) return; // karalama: çizim kısayolları uygulamaya gitsin
+  e.stopPropagation();
   if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) return;
   if (e.key === "Escape") {
     e.preventDefault();

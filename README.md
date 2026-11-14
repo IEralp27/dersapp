@@ -92,6 +92,33 @@ PDF çıktısı yok: mevcut PDF dışa aktarımı metni resim yapar ve Türkçe 
 
 Claude Desktop, Claude Code, Gemini CLI gibi uygulamalar DersApp'e bağlanıp açık PDF'i okuyabilir ve test gönderebilir. Kurulum: `docs/MCP.md`.
 
+## Test hazırla ("Beni sına" testi)
+
+Yapay zeka panelinde "Test hazırla": kapsam (bu sayfa, sayfa aralığı, **tüm belge**, C ile seçilen bölge; sunum PDF gibi),
+soru sayısı (5/10/15/20/30/40 ya da 3-40 arası serbest sayı), zorluk ve tür (çoktan seçmeli / karışık).
+- 8 sayfaya kadar sayfa görüntüleri gider; daha uzun kapsamda sayfa metni (PDF.js, metni olmayan sayfaların bir kısmı görüntüyle)
+  parça parça gönderilir. Claude Code CLI + "Dosyalara eriş" açıkken belgeyi model Read ile kendisi okur.
+- 10'dan çok soru parça parça üretilir (ilerleme gösterilir); sonraki parçaya "tekrar sorma" listesi gider, tekrar eden sorular atılır.
+- Şıklar uygulamada karıştırılır, doğru şıkkın yeri test boyunca A/B/C/D'ye dengeli dağılır; açıklamadaki "B şıkkı" gibi atıflar yeni harfe çevrilir.
+  "Hepsi/Hiçbiri/A ve B" sonda kalır (istemde yasak). Doğru şık belirgin en uzun ya da tek sayılı/birimli ise çeldiriciler bir kez yeniden yazdırılır.
+- Her soruda **karalama alanı** (kalem, fosforlu, silgi, seç, metin, geri al, temizle; beyaz tahtanın motoru). Test açıkken soru başına durur;
+  sonuç ekranında görünür, yanlış soruda "Çözümümü kontrol et" karalamayı gönderir.
+- Her soru kaynak sayfasını tutar: sonuçta "Kaynak sayfaya git", hata defterinde "Kaynağa git".
+- Mantık: `ai/quiz.ts` (ayrıştırma/puan), `ai/quiz-plan.ts` (kapsam/parça/tekrar), `ai/quiz-quality.ts` (karıştırma/denge/ele veren şık);
+  testler `node src/ai/quiz.test.ts`, `quiz-plan.test.ts`, `quiz-quality.test.ts`.
+
+## Karalama alanı
+
+PDF'in dışındaki ekranlarda elle çözmek için: test soruları ve sonuç ekranı, hata defteri tekrarı ("Karalama alanı"), yapay zeka sekmesi
+(başlıkta "Karalama"). Ana araç çubuğu ve P/H/E/S/M, Ctrl+Z/Ctrl+Y en son dokunulan karalamaya gider. Karalamalar diske yazılmaz
+(test/sekme kapanınca silinir). Dosya: `ink-pad.ts`.
+
+## Bu sayfayı anlat / özetle
+
+İki düğme bilerek farklıdır (`ai/prompts.ts` `explainPage` / `summarizePage`):
+- **Anlat:** tahtadaki öğretmen gibi adım adım öğretir (neden/nasıl, çözümlü küçük örnek, sayfada işaretler, sonda kontrol sorusu).
+- **Özetle:** sınav öncesi kısa döküm (konu, tanımlar, LaTeX formüller, 5-8 madde, "Sınavda çıkabilir"); öğretmez, soru sormaz, işaret koymaz.
+
 ## Klasörler
 
 - `src/` arayüz (TypeScript)
@@ -99,6 +126,7 @@ Claude Desktop, Claude Code, Gemini CLI gibi uygulamalar DersApp'e bağlanıp a�
   - `viewer.ts` PDF görünümü ve sayfa üstü çizim
   - `draw.ts` çizim modeli (şekiller, geri al, silgi)
   - `select.ts` seç/taşı aracı
+  - `ink-pad.ts` karalama alanı (test, hata defteri, AI sekmesi; beyaz tahta motorunu yeniden kullanır)
   - `calc.ts`, `calc-engine.ts` hesap makinesi (`node src/calc-engine.test.ts` ile test)
   - `ai/` yapay zeka paneli; öğretme talimatı `ai/prompts.ts` içinde; sağlayıcılar `ai/providers.ts`, Claude Code CLI `ai/cli-run.ts` + `ai/cli-stream.ts`, Gemini CLI `ai/gemini-run.ts` + `ai/gemini-stream.ts`
   - `ai/ai-tab.ts` yapay zeka sekmesi (tam sekme sohbet; akış/çizim panel.ts `chatAsk` ile ortak), `ai/sohbet.ts` konuşma kaydı + başlık (`node src/ai/sohbet.test.ts`)

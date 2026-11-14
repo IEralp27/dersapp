@@ -9,6 +9,7 @@ import { ajanReady, ajanRow, bindCitations } from "./ajan-ui";
 import { systemWithProfile } from "./learner-ui";
 import { SYSTEM_PROMPT } from "./prompts";
 import { ttsDock } from "./tts";
+import { InkPad } from "../ink-pad";
 import { ConvStore, DEFAULT_TITLE, deriveTitle, docsContext, newConvId, titleOf } from "./sohbet";
 import type { DocContext } from "./sohbet";
 
@@ -96,6 +97,9 @@ export class AiTab {
   private preparing = false;
   private surface: ChatSurface;
   private target: ChatTarget;
+  /** Karalama alanı (ink-pad.ts): sohbet sırasında elle hesap için; sekme kapanınca silinir */
+  private pad: InkPad | null = null;
+  private padBox: HTMLElement;
 
   constructor(id: string) {
     this.id = id;
@@ -122,7 +126,12 @@ export class AiTab {
       if (this.picker) this.closePicker();
       else this.openHistory(hist);
     });
-    head.append(title, hist, gear);
+    const scratch = el("button", "ai-chip", "Karalama");
+    scratch.title = "Sohbetin altında elle çözüm/hesap için karalama alanı (kalem, fosforlu, silgi, geri al)";
+    scratch.addEventListener("click", () => this.toggleScratch(scratch));
+    head.append(title, scratch, hist, gear);
+    this.padBox = el("div", "ai-tab-scratch");
+    this.padBox.hidden = true;
 
     this.main = el("div", "ai-main ai-tab-main");
     this.compose = el("div", "ai-compose ai-tab-compose");
@@ -150,7 +159,7 @@ export class AiTab {
       if (href) navigator.clipboard.writeText(href).then(() => host.toast("Bağlantı adresi panoya kopyalandı.", "info"), () => {});
     });
     bindCitations(this.el); // [dosya.pdf s.12] -> o PDF'i o sayfada aç
-    this.el.append(head, this.main, this.compose);
+    this.el.append(head, this.main, this.padBox, this.compose);
 
     this.surface = {
       main: () => this.main,
@@ -205,8 +214,19 @@ export class AiTab {
     setChatTarget(null);
   }
 
+  private toggleScratch(b: HTMLElement): void {
+    if (!this.pad) {
+      this.pad = new InkPad({ label: "Karalama (yalnızca bu sekme açıkken durur)", height: 0 });
+      this.pad.mount(this.padBox);
+    }
+    this.padBox.hidden = !this.padBox.hidden;
+    b.textContent = this.padBox.hidden ? "Karalama" : "Karalamayı gizle";
+    if (!this.padBox.hidden) this.pad.focus();
+  }
+
   /** Sekme kapandı: konuşma geçmişte kalır (boşsa silinir). */
   dispose(): void {
+    this.pad?.dispose();
     this.conv.busy?.abort();
     this.hide();
     this.el.remove();

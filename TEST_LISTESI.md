@@ -88,3 +88,26 @@ Her satırı dene, olursa işaretle. Olmazsa hata metnini/ekran görüntüsünü
 - [ ] İki sekme ayrı konuşma; uygulamayı kapat-aç: sekmeler ve konuşmalar geri gelir; sekmeyi kapatınca konuşma silinir.
 - [ ] AI sekmesini kapat; "Geçmiş" düğmesinden aç (mesajlar geri gelir), açık olanı seçince o sekmeye geçer, "Sil" iki tıkla siler; boş sohbet kapanınca geçmişte görünmez.
 - [ ] Sunum + yapay zeka: .pptx aç, CLI + Dosyalara eriş ile "bu sunumu özetle" → `office/…/sunum.pdf` okunur; klasördeki açılmamış .pptx'i sor → `sunum-metin/*.md` okunur; [ad.pptx s.N] ve [ad.pdf s.N] sunumu o slaytta açar; API sağlayıcıda "Klasörde ara" .pptx slaytlarını bulur.
+
+## Test hazırla (şık dengesi, kapsam, karalama)
+- [ ] Formda soru sayısı: 5/10/15/20/30/40 düğmeleri ve "ya da yaz" kutusu (2 yazınca 3'e, 99 yazınca 40'a çekilir).
+- [ ] Kapsam "Tüm belge" (uzun PDF, API anahtarlı sağlayıcı): not "sayfa metinleri gönderilecek … N istek" der; ilerleme "parça k/N" gösterir; sorular farklı sayfalardan, "s. N" doğru.
+- [ ] Aynı kapsam Claude Code CLI + Dosyalara eriş açıkken: not "Claude Code belgeyi kendisi okuyacak"; CLI PDF'i okur, sorular doğru sayfa numaralı.
+- [ ] Sunum (.pptx) açıkken tüm belge testi: PDF gibi çalışır, sayfa = slayt.
+- [ ] 40 soruluk test: tekrar eden soru yok (ya da bildirimde "tekrar eden çıkarıldı"), iptal hemen durdurur.
+- [ ] 20 soruluk çoktan seçmeli testte doğru şıklar A/B/C/D'ye yaklaşık eşit dağılıyor (hep B değil).
+- [ ] Açıklamalarda "B şıkkı" gibi bir atıf varsa, gösterilen harf doğru şıkkın harfiyle aynı.
+- [ ] Doğru şık en uzun/en ayrıntılı şık olarak öne çıkmıyor; sayısal şıkların hepsi aynı birimle.
+- [ ] Soruda "Karalama alanı": kalemle yaz, fosforlu, silgi, geri al (düğme ve Ctrl+Z), temizle; sonraki soruya geçip dönünce karalama duruyor.
+- [ ] Karalamaya yazarken A/B/C/D tuşları şık seçmiyor; P/H/E aracı değiştiriyor; sol araç çubuğu da karalamaya çiziyor.
+- [ ] Kalemli tablet/dokunmatik ekranda karalama akıcı (sayfa kaymıyor).
+- [ ] Sonuç ekranında karalama görünüyor; yanlış soruda "Çözümümü kontrol et" paneli açıp ilk hatalı satırı söylüyor.
+- [ ] "Bitir"e hızlı iki kez bas: Testlerim'de tek deneme, hata defterinde çift kart yok.
+- [ ] Klavye: Enter sonraki soru, ← → gez, D/Y doğru-yanlış.
+- [ ] Sonuçta ve hata defterinde "Kaynak sayfaya git" doğru sayfayı açıyor (tüm belge testinde de).
+- [ ] Hata defteri tekrarında "Karalama alanı" açılıyor, çizim + "Çözümümü kontrol et" çalışıyor.
+- [ ] AI sekmesinde "Karalama": alan sohbetin altında açılıyor, çizim + Ctrl+Z.
+
+## Bu sayfayı anlat / özetle
+- [ ] Düğmelerin üstüne gelince farklı ipuçları görünüyor.
+- [ ] Aynı sayfada ikisini dene: "anlat" adım adım öğretiyor (örnek, işaretler, sonda kontrol sorusu); "özetle" kısa döküm (Konu, Tanımlar, Formüller, 5-8 madde, Sınavda çıkabilir), soru ve işaret yok.

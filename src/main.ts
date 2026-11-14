@@ -13,6 +13,7 @@ import { initMistakes } from "./ai/mistakes-ui";
 import { initToday } from "./ai/today-ui";
 import { initMcp } from "./mcp";
 import { initTextPlace } from "./text-place";
+import { activePad, initInk, syncPads } from "./ink-pad";
 import { GEMINI_URL, NOTEBOOKLM_URL, hostLabel, isNotebookLm, normalizeInput } from "./web/url";
 import { isOfficePath, isPptx, pptxCacheKey, progressText, stripExt } from "./office";
 import { initMedia, mediaStore, refreshMedia } from "./web/media-ui";
@@ -920,25 +921,40 @@ function renderToolState(): void {
   sizeInput.value = String(tools.size);
   document.body.dataset.tool = tools.tool;
   active?.view?.syncTool();
+  syncPads(); // karalama alanlarının küçük araç çubukları (ink-pad.ts)
+  const pad = activePad();
+  if (pad) {
+    undoBtn.disabled = !pad.canUndo;
+    redoBtn.disabled = !pad.canRedo;
+    clearBtn.disabled = pad.empty;
+    return;
+  }
   const notes = active?.view?.notes;
   undoBtn.disabled = !notes?.canUndo;
   redoBtn.disabled = !notes?.canRedo;
   clearBtn.disabled = !notes || notes.get(active!.view!.page).length === 0;
 }
 
+// Geri al / ileri al / temizle: ekranda bir karalama alanı (test, hata defteri, AI sekmesi) hedefse ona gider
 function undo(): void {
+  const pad = activePad();
+  if (pad) return pad.undo();
   const view = active?.view;
   const page = view?.notes.undo();
   if (view && page && Math.abs(page - view.page) > 1) view.goToPage(page);
 }
 
 function redo(): void {
+  const pad = activePad();
+  if (pad) return pad.redo();
   const view = active?.view;
   const page = view?.notes.redo();
   if (view && page && Math.abs(page - view.page) > 1) view.goToPage(page);
 }
 
 function clearPage(): void {
+  const pad = activePad();
+  if (pad) return pad.clear();
   const view = active?.view;
   if (view) view.notes.clearPage(view.page); // Ctrl+Z ile geri alınabilir
 }
@@ -1023,6 +1039,7 @@ function onKey(e: KeyboardEvent): void {
 
 async function init(): Promise<void> {
   buildTools();
+  initInk({ tools, colors: COLORS, setTool, setColor, refresh: renderToolState }); // karalama alanları (ink-pad.ts)
   calc = initCalculator();
   initExams();
   initMistakes({ // hata defteri (ai/mistakes-ui.ts)
