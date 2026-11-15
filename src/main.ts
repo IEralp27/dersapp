@@ -19,6 +19,7 @@ import { isOfficePath, isPptx, pptxCacheKey, progressText, stripExt } from "./of
 import { initMedia, mediaStore, refreshMedia } from "./web/media-ui";
 import * as web from "./web/web-backend";
 import { isMobile } from "./platform";
+import { initMobileChrome } from "./mobile-chrome";
 import "./mobile.css";
 
 // Telefon düzeni (mobile.css); masaüstüne özgü düğmeler CSS ile gizlenir
@@ -1202,6 +1203,7 @@ async function init(): Promise<void> {
   renderSidebar();
   // "Bugün ne çalışayım?" (ai/today-ui.ts): son açılanlar kaldığı sayfayla
   initToday({ toast, recent: () => saved.recent.map((r) => ({ ...r, page: saved.pos[r.path]?.page ?? 1 })) });
+  if (isMobile) initMobileChrome(); // telefon: tek satır üst çubuk, "⋯" menüsü, çubukları gizle/göster
 
   // Geliştirme kolaylığı: tarayıcıda ?open=/dosya.pdf ile doğrudan aç
   const direct = new URLSearchParams(location.search).get("open");

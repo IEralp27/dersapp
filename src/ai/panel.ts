@@ -7,6 +7,7 @@ import type { PdfView } from "../viewer";
 import "./ai.css";
 import { initFloat } from "./float";
 import { initTts, ttsAttach } from "./tts";
+import { initSubtitle, subtitleHolds, subtitleRefresh } from "./subtitle-ui";
 import { renderMarkdown } from "./markdown";
 import { initStudy, studyRow, dialogOpen } from "./quiz-view";
 import { recordChip } from "./recording-ui";
@@ -698,7 +699,9 @@ function render(): void {
   modelLabel.title = modelLabel.textContent;
   toggleBtn.classList.toggle("on", ui.open);
   panel.hidden = !ui.open;
-  lessonSync(cur?.path ?? null, ui.open && !settingsOpen); // sekme/panel değişince ders duraklar
+  // sekme/panel değişince ders duraklar; panel kapalıyken altyazı görünümü dersi üstlenir (subtitle-ui.ts)
+  lessonSync(cur?.path ?? null, ui.open ? !settingsOpen : subtitleHolds());
+  subtitleRefresh();
   if (!ui.open) return;
   floatCtl?.refit();
 
@@ -1252,7 +1255,12 @@ export function initAi(h: AiHost): void {
       const c = convs.get(path);
       if (c) c.busy = ctrl;
     },
-    render, toImage: (cv) => toImage(cv), openSettings, panelOpen: () => ui.open && !panel.hidden,
+    render, toImage: (cv) => toImage(cv), openSettings, panelOpen: () => (ui.open && !panel.hidden) || subtitleHolds(),
+  });
+  // Altyazı görünümü: telefonda (ve masaüstünde isteğe bağlı) ders/sesli okuma PDF'in üstünde altyazı olarak akar
+  initSubtitle({
+    current: () => host.current(), panelOpen: () => ui.open && !panel.hidden,
+    openPanel: () => toggleAi(true), closePanel: () => toggleAi(false),
   });
   initAjan({
     folder: () => host.folder?.() ?? null, docs: () => host.docs?.() ?? [], current: () => host.current(),

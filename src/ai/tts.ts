@@ -23,6 +23,7 @@ import { SYSTEM, chooseEngine, clampRate, needsChooser, parseSettings } from "./
 import type { TtsSettings } from "./tts-settings";
 import type { ClipProvider } from "./tts-audio";
 import { learnerTts } from "./learner-ui";
+import { subtitleToggle } from "./subtitle-pref";
 
 export type { Avail, EngineConfig, SpeakEvents, SpeakOpts, Speaker, TtsEngine, VoiceInfo };
 
@@ -245,6 +246,11 @@ const controls = new WeakMap<HTMLElement, { play: HTMLButtonElement; stop: HTMLB
 /** Dış denetleyicinin (ders modu) okuma kancaları; yalnızca ttsPlay ile başlatılan okumada dolu */
 let hooks: PlayHooks | null = null;
 const turns = new WeakMap<HTMLElement, TtsTurn>();
+/** Altyazı (subtitle-ui.ts): durum değişince haber alanlar, cümlenin başlama anı, panel kapalıyken okumayı sürdürme */
+const listeners = new Set<() => void>();
+let segT0 = 0;
+let pausedAt = 0;
+let keepAlive: () => boolean = () => false;
 
 let bar: HTMLElement;
 let barPlay: HTMLButtonElement;
@@ -517,6 +523,8 @@ function play(t: TtsTurn, from = 0): void {
 function speakCurrent(): void {
   const s = segs[idx];
   if (!s) return finish();
+  segT0 = performance.now();
+  pausedAt = 0;
   highlight(idx);
   hooks?.onSegment?.(idx, s);
   const v = speaker === system ? pickVoice(lang) : { id: null, lang: lang === "tr" ? "tr-TR" : "en-US" };
@@ -606,6 +614,7 @@ function pause(): void {
   // Gerçek pause/resume motorlar arasında tutarsız: yoksa cümleyi kesip yeniden başlatmak her yerde çalışır
   if (!speaker.pause?.()) speaker.stop();
   state = "paused";
+  pausedAt = performance.now();
   sync();
 }
 
@@ -615,6 +624,9 @@ function resume(): void {
   if (stale || !speaker.resume?.()) {
     stale = false;
     speakCurrent();
+  } else if (pausedAt) {
+    segT0 += performance.now() - pausedAt; // cümle kaldığı yerden sürüyor
+    pausedAt = 0;
   }
   sync();
 }
@@ -626,6 +638,7 @@ function jump(d: number): void {
   else {
     speaker.stop(); // duraklatılmış sesi bırak; devam edince yeni cümle baştan okunur
     stale = true;
+    segT0 = pausedAt = performance.now();
     highlight(idx);
   }
   sync();
@@ -649,6 +662,13 @@ function toggleTurn(t: TtsTurn): void {
 
 function sync(old: TtsTurn | null = null): void {
   if (!host) return;
+  for (const f of listeners) {
+    try {
+      f();
+    } catch (e) {
+      console.error(e);
+    }
+  }
   for (const t of [old, turn]) {
     if (!t) continue;
     const c = controls.get(t.el);
@@ -703,6 +723,8 @@ function buildBar(): HTMLElement {
     barRate,
     btn("Ses ayarları", ICONS.sliders, () => togglePop()),
   );
+  const cc = subtitleToggle("icon"); // masaüstü: "Altyazı görünümü" (subtitle-pref.ts)
+  if (cc) row.lastElementChild!.before(cc);
   barNote = document.createElement("div");
   barNote.className = "tts-note";
   barNote.hidden = true;
@@ -1087,7 +1109,7 @@ export function initTts(h: Host, custom?: Speaker): void {
   // Okunan yanıt silinince, sekme/konuşma değişince ya da panel kapanınca dur
   watcher = new MutationObserver(() => {
     if (state === "idle" || !turn || !host) return;
-    if (host.panel.hidden || (!turn.sample && (!turn.el.isConnected || !host.main.contains(turn.el)))) stop();
+    if ((host.panel.hidden && !keepAlive()) || (!turn.sample && (!turn.el.isConnected || !host.main.contains(turn.el)))) stop();
   });
   watch(h.panel);
   window.addEventListener("pagehide", () => stop());
@@ -1206,4 +1228,45 @@ export async function ttsRecorder(id: string): Promise<{ name: string; clips: Cl
 /** Okunacak metni hazırlar (formüller doğal Türkçe okunur): Markdown + LaTeX -> düz konuşma metni. */
 export function ttsSpeechText(markdown: string, l?: Lang): string {
   return toSpeech(markdown, l ?? guessLang(markdown)).map((s) => s.text.replaceAll(OBJ, " ")).join(" ").replace(/\s+/g, " ").trim();
+}
+
+// ================================================================ Altyazı görünümü (subtitle-ui.ts)
+
+/** Okumanın anlık durumu: okunan yanıt, cümleler, sıradaki cümle ve o cümlenin başlayalı geçen süresi (ms) */
+export function ttsNow(): { state: State; turn: TtsTurn | null; segs: readonly Segment[]; idx: number; rate: number; elapsed: number; docked: boolean } {
+  const now = performance.now();
+  const elapsed = state === "idle" ? 0 : Math.max(0, (pausedAt || now) - segT0);
+  return { state, turn, segs, idx, rate: settings.rate, elapsed, docked: !!host && !!baseDock && host.panel === baseDock.panel };
+}
+
+/** Okuma durumu (oynuyor/duraklatıldı/cümle/hız) her değiştiğinde çağrılır. Bırakmak için dönen işlevi çağır. */
+export function onTtsChange(f: () => void): () => void {
+  listeners.add(f);
+  return () => listeners.delete(f);
+}
+
+/** Panel kapalıyken okuma sürsün mü (altyazı görünümü okumayı üstlenmişse true) */
+export function ttsKeepAlive(f: () => boolean): void {
+  keepAlive = f;
+}
+
+/** Önceki/sonraki cümle */
+export function ttsJump(d: number): void {
+  jump(d);
+}
+
+/** Oynat/duraklat */
+export function ttsToggle(): void {
+  if (state === "playing") pause();
+  else resume();
+}
+
+/** Hızı sıradaki değere geçirir (çubuktaki hız düğmesiyle aynı) */
+export function ttsCycleRate(): void {
+  const i = RATES.findIndex((r) => r >= settings.rate - 0.01);
+  setRate(RATES[(i + 1) % RATES.length] ?? 1);
+}
+
+export function ttsRateLabel(): string {
+  return rateLabel(settings.rate);
 }

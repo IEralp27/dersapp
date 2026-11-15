@@ -22,6 +22,18 @@ APK: Actions › "Derle" › `dersapp-Android`. Telefonda bak:
 - [ ] Kayıtlı ders sesi "Telefonun sesi" ile üretiliyor
 - [ ] Yanıttaki bağlantı, "Gemini" ve "Site aç" telefonun tarayıcısında açılıyor
 
+## Telefon: sade çubuklar + altyazı
+- [ ] Üstte tek satır (☰, sayfa, yakınlaştırma, ⋯, yapay zeka) + ince sekme şeridi; ⋯ menüsünde PDF aç, Beyaz tahta, Yapay zeka sekmesi, Site aç, Bugün, Sınav takvimi çalışıyor
+- [ ] Alttaki ⌃ çubukları gizliyor (sayfa tam ekran), köşedeki ⌄ geri getiriyor; uygulama kapanıp açılınca durum hatırlanıyor
+- [ ] Dersi başlat → panel kendiliğinden kapanıyor, PDF görünüyor, altta altyazı akıyor (2-3 satır), okunan adımın işareti sayfada vurgulu
+- [ ] Altyazıda duraklat/devam, önceki/sonraki, hız, Soru sor, ayrıntı (tam metin), bitir; ⇅ üste/alta alıyor, başlıktan sürüklenebiliyor, ⌄ gizleyip "Altyazı" düğmesiyle geri geliyor
+- [ ] Altyazı dışında sayfa kaydırma ve iki parmak yakınlaştırma çalışıyor; altyazı çentik/hareket çubuğunun altında kalmıyor
+- [ ] Kontrol sorusu altyazı penceresinde çıkıyor; cevabı yaz → değerlendirme altyazıda; klavye kutuyu örtmüyor
+- [ ] Formüller altyazıda düzgün çiziliyor
+- [ ] Sesli anlatım kapalıyken altyazı metnine dokunup/sonraki ile elle ilerleniyor
+- [ ] "Bu sayfayı anlat" yanıtında Sesli oku → panel kapanıyor, altyazı sesle birlikte ilerliyor
+- [ ] Kayıtlı ders oynatılınca altyazı çıkıyor; ayrıntı düğmesi oynatıcı penceresini (sarma çubuğu) açıyor
+
 ## Claude Code CLI (abonelik)
 - [ ] Ayarlarda "Claude Code CLI (abonelik)" seç, "Anlat"a bas: yanıt panele akar, hata yok.
 - [ ] Bunu yaparken siyah konsol penceresi açılmaz.
@@ -127,6 +139,10 @@ APK: Actions › "Derle" › `dersapp-Android`. Telefonda bak:
 - [ ] Sonuçta ve hata defterinde "Kaynak sayfaya git" doğru sayfayı açıyor (tüm belge testinde de).
 - [ ] Hata defteri tekrarında "Karalama alanı" açılıyor, çizim + "Çözümümü kontrol et" çalışıyor.
 - [ ] AI sekmesinde "Karalama": alan sohbetin altında açılıyor, çizim + Ctrl+Z.
+
+## Altyazı görünümü (masaüstü, isteğe bağlı)
+- [ ] Ders çubuğunda ya da sesli okuma çubuğunda CC düğmesi: açınca PDF'in üstünde altyazı, kapatınca eskisi gibi (varsayılan kapalı)
+- [ ] Açıkken panel kapatılsa da ders ve okuma sürüyor
 
 ## Bu sayfayı anlat / özetle
 - [ ] Düğmelerin üstüne gelince farklı ipuçları görünüyor.

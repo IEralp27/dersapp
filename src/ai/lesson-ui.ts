@@ -26,6 +26,7 @@ import {
   startFlow, stepOfSegment,
 } from "./lesson";
 import type { Carried, Ev, Flow, LessonConfig, Pace, Saved } from "./lesson";
+import { subtitleToggle } from "./subtitle-pref";
 
 export interface LessonHost {
   current(): { path: string; name: string; view: PdfView } | null;
@@ -68,6 +69,8 @@ interface Lesson {
   /** Duraklatma nedeni (çubukta gösterilir) */
   note: string;
   status: HTMLElement | null;
+  /** Son ara sorunun cevabı (altyazı görünümünde gösterilir) */
+  aside: string;
 }
 
 const ICON = {
@@ -89,6 +92,20 @@ let formFor: string | null = null;
 /** "Kaldığın yerden devam et" önerisi kapatılan belgeler (bu oturum) */
 const dismissed = new Set<string>();
 let watch = 0;
+/** Altyazı görünümü (subtitle-ui.ts) ders değişikliklerini dinler */
+const listeners = new Set<() => void>();
+
+/** Panel yeniden çizilsin ve dinleyiciler (altyazı) haber alsın */
+function changed(): void {
+  host.render();
+  for (const f of listeners) {
+    try {
+      f();
+    } catch (e) {
+      console.error(e);
+    }
+  }
+}
 
 // ------------------------------------------------------------ Yardımcılar
 
@@ -209,7 +226,7 @@ async function request(system: string, messages: ChatMessage[], body: HTMLElemen
   const ctrl = new AbortController();
   les.ctrl = ctrl;
   host.setBusy(les.path, ctrl);
-  host.render();
+  changed();
   let text = "";
   let frame = 0;
   const paint = (final: boolean) => {
@@ -270,7 +287,7 @@ async function request(system: string, messages: ChatMessage[], body: HTMLElemen
       les.ctrl = null;
       host.setBusy(les.path, null);
     }
-    host.render();
+    changed();
   }
 }
 
@@ -382,6 +399,7 @@ async function askFree(question: string): Promise<void> {
   const text = await request(systemWithProfile(systemWithMarks(SYSTEM_PROMPT)), msgs, body, wrap);
   if (text === null || L !== les) return;
   const vis = parseLessonReply(text).visible;
+  les.aside = visibleText(vis, false);
   attachMarks(les.path, wrap, body, vis);
   const bar = el("div", "ai-answer-tools");
   ttsAttach(bar, { text: visibleText(vis, false), el: wrap, body }, false);
@@ -494,12 +512,13 @@ function dispatch(e: Ev, note = ""): void {
     quietTts();
   }
   if (e.t === "ask") {
+    les.aside = "";
     abortRequest();
     if (les.speech && ttsStateOf(les.speech) === "playing") ttsPause();
   }
   const resumed = (before.paused && !after.paused) || (before.phase === "ask" && after.phase !== "ask");
   if (after.phase !== before.phase || pageChanged || resumed) enter();
-  host.render();
+  changed();
 }
 
 // ------------------------------------------------------------ Başlat / bitir
@@ -508,7 +527,7 @@ function begin(path: string, name: string, cfg: LessonConfig, page: number, carr
   if (L) finishLesson(false);
   L = {
     path, name, cfg, flow: startFlow(cfg.from, cfg.to, page), carried, gen: 0, ctrl: null, msgs: [], image: null, question: "",
-    speech: null, seg: 0, selfStop: false, timer: 0, navUntil: 0, note: "", status: null,
+    speech: null, seg: 0, selfStop: false, timer: 0, navUntil: 0, note: "", status: null, aside: "",
   };
   formFor = null;
   dismissed.delete(path);
@@ -516,7 +535,7 @@ function begin(path: string, name: string, cfg: LessonConfig, page: number, carr
   save();
   startWatch();
   enter();
-  host.render();
+  changed();
 }
 
 function finishLesson(completed: boolean): void {
@@ -535,7 +554,7 @@ function finishLesson(completed: boolean): void {
   const t = host.thread(les.path, les.name);
   t.append(card);
   host.scroll(true);
-  host.render();
+  changed();
 }
 
 // ------------------------------------------------------------ Elle sayfa değiştirme denetimi
@@ -625,7 +644,7 @@ export function lessonChip(path: string | null, disabled: boolean): HTMLElement 
     if (!path) return;
     if (L && L.path === path) return;
     formFor = formFor === path ? null : path;
-    host.render();
+    changed();
   }, ICON.lesson, "PDF'i öğretmen gibi sayfa sayfa anlatsın");
   b.disabled = disabled || !path || (!!L && L.path === path);
   b.classList.toggle("on", formFor === path);
@@ -649,7 +668,7 @@ export function lessonCompose(path: string | null, busy: boolean): HTMLElement |
   go.disabled = busy;
   box.append(go, btn("", "ls-icon", () => {
     dismissed.add(path);
-    host.render();
+    changed();
   }, ICON.close, "Öneriyi kapat (ders kayıtlı kalır)"));
   return box;
 }
@@ -665,7 +684,7 @@ function startForm(cur: { path: string; name: string; view: PdfView }, busy: boo
   const head = el("div", "ls-form-head");
   head.append(el("b", "", "Ders: PDF'i sayfa sayfa anlatsın"), btn("", "ls-icon", () => {
     formFor = null;
-    host.render();
+    changed();
   }, ICON.close, "Kapat"));
   box.append(head);
 
@@ -776,6 +795,47 @@ const PHASE_TEXT: Record<Flow["phase"], string> = {
   done: "Ders bitti",
 };
 
+function statusText(les: Lesson): string {
+  const f = les.flow;
+  let st = f.paused && f.phase !== "ask" && f.phase !== "error" ? "Duraklatıldı" : PHASE_TEXT[f.phase];
+  if (f.phase === "reading" && !f.paused && !les.cfg.voice && !f.hasQuestion && !f.blank) st = "Okuyunca sonraki sayfaya geç";
+  if (f.phase === "reading" && f.blank) st = "Öğretilecek içerik yok; geçiliyor";
+  return st + (les.note ? ` · ${les.note}` : "");
+}
+
+/** Aşamaya göre öne çıkan eylemler (denetim çubuğu ve altyazı görünümü aynı listeyi kullanır) */
+interface MainAction {
+  label: string;
+  icon: string;
+  primary: boolean;
+  run(): void;
+  disabled?: boolean;
+}
+
+function mainActions(les: Lesson, busy: boolean): MainAction[] {
+  const f = les.flow;
+  const inAsk = f.phase === "ask" || f.phase === "asking";
+  const nextLabel = f.page >= f.to ? "Dersi tamamla" : "Sonraki sayfa";
+  const next: MainAction = { label: nextLabel, icon: ICON.next, primary: true, run: () => dispatch({ t: "next" }) };
+  if (f.phase === "ask") return [{ label: "Derse dön", icon: ICON.play, primary: true, run: () => dispatch({ t: "back" }), disabled: busy }];
+  if (f.phase === "decide" && !f.paused) {
+    return [next, { label: "Yeniden anlat", icon: ICON.again, primary: false, run: () => dispatch({ t: "again" }) }];
+  }
+  if (f.phase === "reading" && !f.paused && !f.hasQuestion && !f.blank
+    && (!les.cfg.voice || ttsStateOf(les.speech ?? { text: "", el: document.body }) === "idle")) return [next];
+  if (f.phase === "question" && !f.paused) return [{ label: "Soruyu geç", icon: ICON.next, primary: false, run: () => dispatch({ t: "skip" }) }];
+  if (f.phase === "error") return [{ label: "Yeniden dene", icon: ICON.again, primary: true, run: () => dispatch({ t: "retry" }) }];
+  if (f.paused && !inAsk) {
+    const vp = viewOf(les.path)?.page ?? f.page;
+    const out: MainAction[] = [{ label: `Devam et (s. ${f.page})`, icon: ICON.play, primary: true, run: () => dispatch({ t: "resume" }) }];
+    if (vp !== f.page && vp >= f.from && vp <= f.to) {
+      out.push({ label: `s. ${vp}'ten sürdür`, icon: ICON.next, primary: false, run: () => dispatch({ t: "goto", page: vp }) });
+    }
+    return out;
+  }
+  return [];
+}
+
 function controlBar(les: Lesson, busy: boolean): HTMLElement {
   const f = les.flow;
   const bar = el("div", "ls-bar");
@@ -790,11 +850,7 @@ function controlBar(les: Lesson, busy: boolean): HTMLElement {
   meter.append(fill);
   top.append(prog, meter);
   const status = el("div", "ls-status");
-  const voiceOff = !les.cfg.voice;
-  let st = f.paused && f.phase !== "ask" && f.phase !== "error" ? "Duraklatıldı" : PHASE_TEXT[f.phase];
-  if (f.phase === "reading" && !f.paused && voiceOff && !f.hasQuestion && !f.blank) st = "Okuyunca sonraki sayfaya geç";
-  if (f.phase === "reading" && f.blank) st = "Öğretilecek içerik yok; geçiliyor";
-  status.textContent = st + (les.note ? ` · ${les.note}` : "");
+  status.textContent = statusText(les);
   status.setAttribute("aria-live", "polite");
 
   const ctl = el("div", "ls-ctl");
@@ -813,31 +869,80 @@ function controlBar(les: Lesson, busy: boolean): HTMLElement {
   ask.disabled = inAsk || f.phase === "error";
   const end = btn("", "ls-icon danger", () => finishLesson(false), ICON.stop, "Dersi bitir");
   ctl.append(pauseBtn, prev, again, next, ask, end);
+  const cc = subtitleToggle("ls-icon"); // masaüstü: "Altyazı görünümü" (subtitle-pref.ts)
+  if (cc) end.before(cc);
 
   bar.append(top, status);
   // Bağlama göre öne çıkan eylem
   const main = el("div", "ls-main");
-  if (f.phase === "ask") {
-    const back = btn("Derse dön", "ls-btn primary", () => dispatch({ t: "back" }), ICON.play);
-    back.disabled = busy;
-    main.append(back);
-  } else if (f.phase === "decide" && !f.paused) {
-    main.append(btn(f.page >= f.to ? "Dersi tamamla" : "Sonraki sayfa", "ls-btn primary", () => dispatch({ t: "next" }), ICON.next),
-      btn("Yeniden anlat", "ls-btn", () => dispatch({ t: "again" }), ICON.again));
-  } else if (f.phase === "reading" && !f.paused && !f.hasQuestion && !f.blank && (voiceOff || ttsStateOf(les.speech ?? { text: "", el: bar }) === "idle")) {
-    main.append(btn(f.page >= f.to ? "Dersi tamamla" : "Sonraki sayfa", "ls-btn primary", () => dispatch({ t: "next" }), ICON.next));
-  } else if (f.phase === "question" && !f.paused) {
-    main.append(btn("Soruyu geç", "ls-btn", () => dispatch({ t: "skip" }), ICON.next));
-  } else if (f.phase === "error") {
-    main.append(btn("Yeniden dene", "ls-btn primary", () => dispatch({ t: "retry" }), ICON.again));
-  } else if (f.paused && !inAsk) {
-    const view = viewOf(les.path);
-    const vp = view?.page ?? f.page;
-    main.append(btn(`Devam et (s. ${f.page})`, "ls-btn primary", () => dispatch({ t: "resume" }), ICON.play));
-    if (vp !== f.page && vp >= f.from && vp <= f.to) main.append(btn(`s. ${vp}'ten sürdür`, "ls-btn", () => dispatch({ t: "goto", page: vp }), ICON.next));
+  for (const a of mainActions(les, busy)) {
+    const b = btn(a.label, a.primary ? "ls-btn primary" : "ls-btn", a.run, a.icon);
+    b.disabled = !!a.disabled;
+    main.append(b);
   }
   if (main.childElementCount) bar.append(main);
   bar.append(ctl);
   les.status = status;
   return bar;
+}
+
+// ------------------------------------------------------------ Altyazı görünümü (subtitle-ui.ts)
+
+/** Dersin altyazıya gereken anlık görünümü (ders yoksa null). Mantık burada kalır; altyazı yalnızca gösterir. */
+export interface LessonView {
+  path: string;
+  name: string;
+  page: number;
+  from: number;
+  to: number;
+  phase: Flow["phase"];
+  paused: boolean;
+  /** Durum satırı (denetim çubuğundakiyle aynı) */
+  status: string;
+  /** Okunan/okunacak anlatım (sesli okuma turu) */
+  speech: (TtsTurn & { nums: ReadonlySet<number> }) | null;
+  /** Kontrol sorusu (soru aşamasında cevap bekleniyor) */
+  question: string;
+  /** Yazma alanı derse mi gidiyor ve ne için */
+  input: "answer" | "ask" | null;
+  /** Son ara sorunun cevabı (Markdown) */
+  aside: string;
+  voice: boolean;
+  busy: boolean;
+  actions: { label: string; icon: string; primary: boolean; disabled: boolean; run(): void }[];
+}
+
+export function lessonView(): LessonView | null {
+  const les = L;
+  if (!les) return null;
+  const f = les.flow;
+  const busy = host.busy(les.path);
+  const input = lessonTakesInput(les.path) ? (f.phase === "question" ? "answer" : "ask") : null;
+  return {
+    path: les.path, name: les.name, page: f.page, from: f.from, to: f.to, phase: f.phase, paused: f.paused,
+    status: statusText(les), speech: les.speech, question: f.phase === "question" ? les.question : "", input, aside: les.aside,
+    voice: les.cfg.voice, busy,
+    actions: mainActions(les, busy).map((a) => ({ ...a, disabled: !!a.disabled })),
+  };
+}
+
+/** Altyazı düğmeleri: ders olaylarını denetim çubuğundaki düğmelerle aynı yoldan verir */
+export function lessonDo(what: "toggle" | "ask" | "stop"): void {
+  const les = L;
+  if (!les) return;
+  const f = les.flow;
+  if (what === "stop") return finishLesson(false);
+  if (what === "ask") {
+    if (f.phase !== "ask" && f.phase !== "asking" && f.phase !== "error") dispatch({ t: "ask" });
+    return;
+  }
+  if (f.phase === "ask" || f.phase === "asking" || f.phase === "error") return;
+  if (f.paused) dispatch({ t: "resume" });
+  else dispatch({ t: "pause" }, "Sen duraklattın.");
+}
+
+/** Ders durumu değişince çağrılır (başlama, aşama, bitiş). Bırakmak için dönen işlevi çağır. */
+export function onLessonChange(f: () => void): () => void {
+  listeners.add(f);
+  return () => listeners.delete(f);
 }

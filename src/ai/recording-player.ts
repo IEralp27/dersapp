@@ -33,6 +33,19 @@ const ICON = {
 };
 
 let P: Player | null = null;
+/** Altyazı görünümü (subtitle-ui.ts) oynatıcıyı dinler */
+const listeners = new Set<() => void>();
+let rateSel: HTMLSelectElement | null = null;
+
+function notify(): void {
+  for (const f of listeners) {
+    try {
+      f();
+    } catch (e) {
+      console.error(e);
+    }
+  }
+}
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = "", text = ""): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -64,7 +77,9 @@ export function closePlayer(): void {
   p.audio.removeAttribute("src");
   URL.revokeObjectURL(p.url);
   p.root.remove();
+  rateSel = null;
   showPlayerMarks(p.path, 0, null, null);
+  notify();
 }
 
 function savedRate(): number {
@@ -108,6 +123,7 @@ function tick(p: Player, ui: { seek: HTMLInputElement; time: HTMLElement; play: 
   const playing = !p.audio.paused && !p.audio.ended;
   ui.play.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${playing ? ICON.pause : ICON.play}"/></svg>`;
   ui.play.title = playing ? "Duraklat (Boşluk)" : "Oynat (Boşluk)";
+  notify();
 }
 
 /** Kaydı açık PDF'in üstünde oynatır. */
@@ -173,6 +189,7 @@ export async function playRecording(id: string, path: string): Promise<void> {
     rate.append(o);
   }
   rate.value = String(audio.playbackRate);
+  rateSel = rate;
   rate.addEventListener("change", () => {
     audio.playbackRate = clampPlayRate(Number(rate.value));
     try {
@@ -213,4 +230,56 @@ export async function playRecording(id: string, path: string): Promise<void> {
   void audio.play().catch(() => {
     // kendiliğinden oynatma engellenirse kullanıcı oynat'a basar
   });
+}
+
+// ------------------------------------------------------------ Altyazı görünümü (subtitle-ui.ts)
+
+/** Oynayan kaydın anlık durumu (yoksa null) */
+export function recNow(): {
+  id: string; path: string; title: string; segments: RecManifest["segments"]; spans: RecManifest["spans"];
+  cur: number; t: number; playing: boolean; rate: number;
+} | null {
+  const p = P;
+  if (!p) return null;
+  return {
+    id: p.m.id, path: p.path, title: p.m.title || "Kayıtlı ders", segments: p.m.segments, spans: p.m.spans,
+    cur: p.cur, t: p.audio.currentTime, playing: !p.audio.paused && !p.audio.ended, rate: p.audio.playbackRate,
+  };
+}
+
+export function onRecChange(f: () => void): () => void {
+  listeners.add(f);
+  return () => listeners.delete(f);
+}
+
+export function recToggle(): void {
+  const a = P?.audio;
+  if (!a) return;
+  if (a.paused) void a.play().catch(() => {});
+  else a.pause();
+}
+
+/** Önceki/sonraki parçanın başına git */
+export function recJump(d: number): void {
+  const p = P;
+  if (!p) return;
+  const i = Math.max(0, Math.min(p.m.spans.length - 1, (p.cur < 0 ? 0 : p.cur) + d));
+  p.audio.currentTime = p.m.spans[i]?.start ?? 0;
+}
+
+export function recCycleRate(): void {
+  const p = P;
+  if (!p || !rateSel) return;
+  const i = PLAY_RATES.findIndex((r) => r >= p.audio.playbackRate - 0.01);
+  rateSel.value = String(PLAY_RATES[(i + 1) % PLAY_RATES.length] ?? 1);
+  rateSel.dispatchEvent(new Event("change"));
+  notify();
+}
+
+/** Oynatıcı penceresi (tam metin listesi) görünsün mü; telefonda altyazı varken gizli durur */
+export function recWindow(show?: boolean): boolean {
+  const p = P;
+  if (!p) return false;
+  p.root.classList.toggle("sub-shown", show ?? !p.root.classList.contains("sub-shown"));
+  return p.root.classList.contains("sub-shown");
 }
